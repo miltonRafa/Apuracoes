@@ -1,0 +1,232 @@
+{
+  "executado_em_utc": "2026-10-26T18:32:33.025095+00:00",
+  "status_geral": "APROVADO_COM_ALERTAS",
+  "falhas": 0,
+  "alertas": 2,
+  "testes": [
+    {
+      "teste": "Quantidade de registros de votos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 2841231,
+      "esperado": 2841231,
+      "detalhe": "Origem versus fato_votos"
+    },
+    {
+      "teste": "Total de votos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 190368252,
+      "esperado": 190368252,
+      "detalhe": "Reconciliação integral da medida QT_VOTOS"
+    },
+    {
+      "teste": "Quantidade de boletins por seção/cargo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 721068,
+      "esperado": 721068,
+      "detalhe": "Origem agregada versus fato_boletins"
+    },
+    {
+      "teste": "Chaves duplicadas em fato_votos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "A chave inclui seção, cargo, tipo e número do votável"
+    },
+    {
+      "teste": "Chaves duplicadas em fato_boletins",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Uma linha por seção e cargo"
+    },
+    {
+      "teste": "Consistência interna dos metadados do BU",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Linhas de voto do mesmo BU devem repetir os mesmos metadados"
+    },
+    {
+      "teste": "Equação do eleitorado",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "QT_APTOS = QT_COMPARECIMENTO + QT_ABSTENCOES"
+    },
+    {
+      "teste": "Fechamento de votos por boletim",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Soma de QT_VOTOS = QT_COMPARECIMENTO"
+    },
+    {
+      "teste": "Horários de recebimento válidos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Necessário para ordenar a apuração"
+    },
+    {
+      "teste": "Impressão digital dos registros",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 15038630024383966764,
+      "esperado": 15038630024383966764,
+      "detalhe": "Hash independente de ordem"
+    },
+    {
+      "teste": "Chaves duplicadas em fato_lotes_recebimento",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Uma linha por segundo, UF e cargo"
+    },
+    {
+      "teste": "Reconciliação de boletins nos lotes",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 721068,
+      "esperado": 721068,
+      "detalhe": "Soma dos lotes versus fato_boletins"
+    },
+    {
+      "teste": "Reconciliação de comparecimento nos lotes",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 190368252.0,
+      "esperado": 190368252,
+      "detalhe": "Soma dos lotes versus fato_boletins"
+    },
+    {
+      "teste": "Unicidade da dimensão localidade",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Chave: id_localidade"
+    },
+    {
+      "teste": "Integridade referencial da dimensão localidade",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Fato: boletins_bi"
+    },
+    {
+      "teste": "Unicidade da dimensão cargo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Chave: cd_cargo"
+    },
+    {
+      "teste": "Integridade referencial da dimensão cargo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Fato: boletins_bi"
+    },
+    {
+      "teste": "Unicidade da dimensão votável",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Chave: id_votavel"
+    },
+    {
+      "teste": "Integridade referencial da dimensão votável",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Fato: votos_bi"
+    },
+    {
+      "teste": "Unicidade da dimensão tempo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Chave: id_tempo_recebimento"
+    },
+    {
+      "teste": "Integridade referencial da dimensão tempo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Fato: boletins_bi"
+    },
+    {
+      "teste": "Integridade referencial da dimensão UF",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Todas as siglas possuem nome e região"
+    },
+    {
+      "teste": "Partições publicadas em fato_votos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 28,
+      "esperado": 28,
+      "detalhe": "Uma partição Parquet por UF/Exterior"
+    },
+    {
+      "teste": "Partições publicadas em fato_boletins",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 28,
+      "esperado": 28,
+      "detalhe": "Uma partição Parquet por UF/Exterior"
+    },
+    {
+      "teste": "Partições publicadas em fato_lotes_recebimento",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 28,
+      "esperado": 28,
+      "detalhe": "Uma partição Parquet por UF/Exterior"
+    },
+    {
+      "teste": "Reconciliação por UF",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Linhas e votos conferidos para as 28 UFs/Exterior"
+    },
+    {
+      "teste": "Recebimento anterior à emissão",
+      "severidade": "ALERTA",
+      "status": "ALERTA",
+      "obtido": 600,
+      "esperado": 0,
+      "detalhe": "Anomalia da fonte; casos completos em alertas_temporais.csv"
+    },
+    {
+      "teste": "Emissão anterior ao encerramento",
+      "severidade": "ALERTA",
+      "status": "ALERTA",
+      "obtido": 1,
+      "esperado": 0,
+      "detalhe": "Anomalia da fonte; casos completos em alertas_temporais.csv"
+    }
+  ]
+}

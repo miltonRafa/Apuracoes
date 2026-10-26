@@ -1,0 +1,8 @@
+{
+  "gerado_em_utc": "2026-10-26T18:30:40.685934+00:00",
+  "duckdb_versao": "2.0.0",
+  "arquivos_origem": 28,
+  "pasta_origem": "/home/administrador/Downloads/Apuracoes/02_dados_csv",
+  "pasta_saida": "/home/administrador/Downloads/Apuracoes/04_bi/dados",
+  "regra_ordem_apuracao": "DT_BU_RECEBIDO; empates no mesmo segundo formam um único lote"
+}
