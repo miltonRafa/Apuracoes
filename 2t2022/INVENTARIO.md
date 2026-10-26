@@ -46,4 +46,5 @@ PDFs de leia-me únicos por SHA-256: 1.
 - `04_bi/auditoria/`: reconciliações, hashes das fontes, relatório de validação e alertas de qualidade.
 - `04_bi/GUIA_POWER_BI.md`: relacionamentos e medidas DAX sugeridas.
 - `04_bi/executar_pipeline.sh`: reconstrói e revalida toda a camada sem alterar os dados originais.
+- `04_bi/scripts/prepare_sources.py`: descobre os links na API do TSE, baixa, valida SHA-512 e extrai as fontes.
 - `04_bi/notebooks/analise_evolucao_votos.ipynb`: análise gráfica executada, com uma linha por candidato.

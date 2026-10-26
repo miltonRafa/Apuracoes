@@ -4,13 +4,15 @@ Esta pasta transforma os CSVs oficiais em um modelo próprio para BI, sem altera
 
 ## Executar e validar
 
-Na raiz do projeto:
+Na pasta `2t2022`:
 
 ```bash
 ./04_bi/executar_pipeline.sh
 ```
 
-O pipeline só publica `04_bi/dados/` depois que a construção termina. Em seguida, o validador reconcilia a saída com os CSVs e encerra com erro se algum teste falhar.
+Não é preciso cadastrar links individuais. O pipeline consulta a API oficial do TSE, encontra os 28 pares ZIP/SHA-512 do segundo turno, retoma downloads interrompidos, valida os hashes, extrai os CSVs e cria as pastas necessárias. Arquivos já íntegros são reutilizados.
+
+Depois da preparação das fontes, o pipeline só publica `04_bi/dados/` quando a construção termina. Em seguida, o validador reconcilia a saída com os CSVs e encerra com erro se algum teste falhar. Por fim, o notebook é recriado e executado.
 
 ## Consultar
 
@@ -26,9 +28,8 @@ Consulte `GUIA_POWER_BI.md` para montar o modelo e as medidas.
 
 ## Notebook de análise
 
-O notebook executado `notebooks/analise_evolucao_votos.ipynb` mostra a evolução dos votos acumulados, a participação nos votos válidos e o ritmo de entrada por candidato. Para recriá-lo:
+O notebook executado `notebooks/analise_evolucao_votos.ipynb` mostra a evolução dos votos acumulados, a participação nos votos válidos e o ritmo de entrada por candidato. Para recriá-lo isoladamente:
 
 ```bash
-.venv/bin/python -m pip install -r 04_bi/requirements-notebook.txt
 .venv/bin/python 04_bi/scripts/create_analysis_notebook.py
 ```
