@@ -19,3 +19,14 @@ O comando executa a cadeia completa:
 6. recria e executa o notebook de evolução dos votos.
 
 Os ZIPs, CSVs, Parquets e o ambiente Python são ignorados pelo Git.
+
+## Preparação do segundo turno de 2026
+
+O diretório `2t2026/` contém um pré-projeto separado que somente descobre, baixa e valida os ZIPs oficiais. Ele ainda não foi executado e não contém transformação ou camada BI.
+
+Quando a publicação oficial estiver disponível:
+
+```bash
+cd 2t2026
+./executar_download.sh
+```
