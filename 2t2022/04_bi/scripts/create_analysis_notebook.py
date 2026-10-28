@@ -43,10 +43,10 @@ def main() -> None:
             `DT_BU_RECEBIDO`, que representa o recebimento do boletim de urna. Cada candidato
             aparece em uma linha própria.
 
-            **Critérios:** somente votos nominais (`CD_TIPO_VOTAVEL = 1`); eventos com o mesmo
-            minuto formam um lote visual; os votos são acumulados em ordem crescente de
-            recebimento. O agrupamento por minuto melhora a leitura, mas não inventa uma ordem
-            entre boletins recebidos no mesmo segundo.
+            **Critérios:** somente votos nominais (`CD_TIPO_VOTAVEL = 1`); cada horário distinto
+            de `DT_BU_RECEBIDO` forma uma atualização; eventos recebidos no mesmo segundo
+            permanecem no mesmo lote. Os votos são acumulados em ordem crescente de recebimento,
+            sem inventar uma ordem entre boletins que possuem exatamente o mesmo horário.
             """
         ),
         code(
@@ -82,9 +82,6 @@ def main() -> None:
                 "responsive": True,
                 "toImageButtonOptions": {"format": "png", "scale": 2},
             }
-
-            def formatar_inteiro_br(valor):
-                return f"{int(valor):,}".replace(",", ".")
 
             def configurar_tempo(figura, titulo, eixo_y):
                 figura.update_layout(
@@ -129,9 +126,8 @@ def main() -> None:
         ),
         code(
             '''
-            CARGO = 1       # 1 = Presidente; 3 = Governador
-            UF = None       # None = Brasil inteiro; exemplo: "SP"
-            JANELA = "1min" # resolução visual do gráfico
+            CARGO = 1  # 1 = Presidente; 3 = Governador
+            UF = None  # None = Brasil inteiro; exemplo: "SP"
 
             if CARGO == 3 and UF is None:
                 print("Aviso: para Governador, selecione uma UF para evitar misturar disputas estaduais.")
@@ -149,7 +145,7 @@ def main() -> None:
 
             consulta = f"""
                 SELECT
-                    date_trunc('minute', v.dt_bu_recebido) AS instante,
+                    v.dt_bu_recebido AS instante,
                     concat(d.nm_votavel, ' (', d.nr_votavel, ')') AS candidato,
                     sum(v.qt_votos)::BIGINT AS votos_no_lote
                 FROM read_parquet('{caminho_fatos}', hive_partitioning=true) v
@@ -170,13 +166,11 @@ def main() -> None:
                 .fillna(0)
                 .sort_index()
             )
-            indice_completo = pd.date_range(incrementos.index.min(), incrementos.index.max(), freq=JANELA)
-            incrementos = incrementos.reindex(indice_completo, fill_value=0)
             incrementos.index.name = "instante"
             acumulado = incrementos.cumsum()
 
             print(f"Período: {acumulado.index.min()} a {acumulado.index.max()}")
-            print(f"Pontos por linha: {len(acumulado):,}")
+            print(f"Atualizações distintas no segundo: {len(acumulado):,}")
             print(f"Candidatos: {', '.join(acumulado.columns)}")
             '''
         ),
@@ -229,6 +223,9 @@ def main() -> None:
             Cada linha representa um candidato. O eixo horizontal segue a data/hora de recebimento
             dos boletins; o eixo vertical mostra votos nominais acumulados.
 
+            A linha em degraus muda em cada horário de recebimento disponível na fonte. Passe o
+            cursor sobre um degrau para ver a data, a hora com segundos e o total naquele ponto.
+
             **Zoom interativo:** arraste sobre qualquer trecho para ampliar; use a roda do mouse
             sobre o gráfico; mova as alças da faixa inferior; ou use os botões `15 min`, `1 h`,
             `6 h` e `Tudo`. A barra no canto superior direito permite alternar entre zoom e
@@ -244,11 +241,11 @@ def main() -> None:
                 fig.add_trace(go.Scatter(
                     x=acumulado.index,
                     y=acumulado[candidato],
-                    customdata=acumulado[candidato].map(formatar_inteiro_br),
                     name=candidato,
-                    mode="lines",
-                    line={"width": 2.5, "color": cores.get(candidato)},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{customdata} votos<extra></extra>",
+                    mode="lines+markers",
+                    line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
+                    marker={"size": 3, "color": cores.get(candidato)},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: %{y:,.0f} votos<extra></extra>",
                 ))
 
             configurar_tempo(
@@ -279,8 +276,8 @@ def main() -> None:
                     y=participacao[candidato],
                     name=candidato,
                     mode="lines",
-                    line={"width": 2.3, "color": cores.get(candidato)},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{y:.4f}%<extra></extra>",
+                    line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: %{y:.4f}%<extra></extra>",
                 ))
 
             configurar_tempo(
@@ -294,31 +291,31 @@ def main() -> None:
         ),
         markdown(
             """
-            ## Ritmo de entrada dos votos
+            ## Variação a cada atualização
 
-            O gráfico agrupa os votos em intervalos de 15 minutos e também permite ampliar
-            qualquer intervalo com os controles interativos.
+            Este gráfico mostra quantos votos de cada candidato entraram em cada horário distinto
+            de recebimento, sem agrupar por minuto ou por intervalos de 15 minutos. Use o zoom para
+            separar os pontos que ficam sobrepostos quando todo o período está visível.
             """
         ),
         code(
             """
-            incrementos_15min = incrementos.resample("15min").sum()
             fig = go.Figure()
-            for candidato in incrementos_15min.columns:
+            for candidato in incrementos.columns:
                 fig.add_trace(go.Scatter(
-                    x=incrementos_15min.index,
-                    y=incrementos_15min[candidato],
-                    customdata=incrementos_15min[candidato].map(formatar_inteiro_br),
+                    x=incrementos.index,
+                    y=incrementos[candidato],
                     name=candidato,
-                    mode="lines",
-                    line={"width": 2.1, "color": cores.get(candidato)},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{customdata} votos<extra></extra>",
+                    mode="lines+markers",
+                    line={"width": 1.2, "color": cores.get(candidato)},
+                    marker={"size": 3, "color": cores.get(candidato)},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: +%{y:,.0f} votos<extra></extra>",
                 ))
 
             configurar_tempo(
                 fig,
-                f"Votos adicionados a cada 15 minutos — {local}",
-                "Votos recebidos no intervalo",
+                f"Votos adicionados em cada atualização — {local}",
+                "Votos adicionados na atualização",
             )
             fig.update_yaxes(tickformat=",.0f")
             fig.show(config=CONFIG_GRAFICO)
@@ -331,13 +328,16 @@ def main() -> None:
             trocas_lideranca = int(lider_por_instante.ne(lider_por_instante.shift()).sum() - 1)
             lider_final = resultado.index[0]
             margem_final = int(resultado.iloc[0, 0] - resultado.iloc[1, 0]) if len(resultado) > 1 else 0
-            pico_por_candidato = incrementos_15min.idxmax()
+            picos = pd.DataFrame({
+                "horário_da_atualização": incrementos.idxmax(),
+                "votos_adicionados": incrementos.max().astype("int64"),
+            })
 
             print(f"Líder ao final da seleção: {lider_final}")
             print(f"Margem final entre os dois primeiros: {margem_final:,} votos".replace(",", "."))
-            print(f"Trocas de liderança observadas na série por minuto: {trocas_lideranca}")
-            print("\\nIntervalo de maior entrada de votos por candidato:")
-            display(pico_por_candidato.rename("início_do_intervalo_de_15_min").to_frame())
+            print(f"Trocas de liderança observadas entre atualizações: {trocas_lideranca}")
+            print("\\nAtualização de maior entrada de votos por candidato:")
+            display(picos)
             con.close()
             """
         ),

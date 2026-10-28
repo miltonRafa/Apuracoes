@@ -28,7 +28,7 @@ Consulte `GUIA_POWER_BI.md` para montar o modelo e as medidas.
 
 ## Notebook de análise
 
-O notebook executado `notebooks/analise_evolucao_votos.ipynb` mostra a evolução dos votos acumulados, a participação nos votos válidos e o ritmo de entrada por candidato. Os três gráficos são interativos: permitem zoom por seleção ou roda do mouse, deslocamento, seleção de intervalo pela faixa inferior e restauração por duplo clique. Para recriá-lo isoladamente:
+O notebook executado `notebooks/analise_evolucao_votos.ipynb` mostra a evolução dos votos acumulados em degraus, a participação nos votos válidos e os votos adicionados em cada horário de atualização disponível na fonte. Não há mais agrupamento visual por minuto ou por intervalos de 15 minutos. Os três gráficos são interativos: permitem zoom por seleção ou roda do mouse, deslocamento, seleção de intervalo pela faixa inferior e restauração por duplo clique. Para recriá-lo isoladamente:
 
 ```bash
 .venv/bin/python 04_bi/scripts/create_analysis_notebook.py
