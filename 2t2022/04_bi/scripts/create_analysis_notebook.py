@@ -84,7 +84,7 @@ def main() -> None:
                 "toImageButtonOptions": {"format": "png", "scale": 2},
             }
 
-            def configurar_tempo(figura, titulo, eixo_y):
+            def configurar_replay(figura, titulo, eixo_y):
                 figura.update_layout(
                     title={"text": titulo, "x": 0.02, "xanchor": "left"},
                     height=650,
@@ -96,8 +96,9 @@ def main() -> None:
                     legend={"title": {"text": "Candidato"}, "orientation": "h", "y": 1.08},
                     margin={"l": 75, "r": 35, "t": 105, "b": 85},
                     xaxis={
-                        "title": "Recebimento do boletim de urna",
-                        "type": "date",
+                        "title": "Ordem original das atualizações",
+                        "type": "linear",
+                        "tickformat": ",d",
                         "rangeslider": {"visible": True, "thickness": 0.10},
                         "showspikes": True,
                         "spikemode": "across",
@@ -144,6 +145,15 @@ def main() -> None:
             filtro_uf = "AND v.sg_uf = ?" if UF else ""
             parametros = [CARGO] + ([UF.upper()] if UF else [])
 
+            consulta_instantes = f"""
+                SELECT DISTINCT v.dt_bu_recebido AS instante
+                FROM read_parquet('{caminho_fatos}', hive_partitioning=true) v
+                WHERE v.cd_cargo = ?
+                  {filtro_uf}
+                ORDER BY instante
+            """
+            instantes_originais = con.execute(consulta_instantes, parametros).df()["instante"]
+
             consulta = f"""
                 SELECT
                     v.dt_bu_recebido AS instante,
@@ -167,12 +177,15 @@ def main() -> None:
                 .fillna(0)
                 .sort_index()
             )
+            incrementos = incrementos.reindex(pd.DatetimeIndex(instantes_originais), fill_value=0)
             incrementos.index.name = "instante"
             acumulado = incrementos.cumsum()
             participacao = acumulado.div(acumulado.sum(axis=1), axis=0).mul(100).fillna(0)
+            ordem_atualizacao = pd.RangeIndex(1, len(incrementos) + 1, name="atualizacao")
+            horarios_texto = incrementos.index.strftime("%d/%m/%Y %H:%M:%S")
 
             print(f"Período: {acumulado.index.min()} a {acumulado.index.max()}")
-            print(f"Atualizações distintas no segundo: {len(acumulado):,}")
+            print(f"Atualizações reproduzidas em ordem: {len(acumulado):,}")
             print(f"Candidatos: {', '.join(acumulado.columns)}")
             '''
         ),
@@ -198,19 +211,31 @@ def main() -> None:
             total_serie = int(incrementos.to_numpy().sum())
             monotono = bool(acumulado.diff().fillna(acumulado).ge(0).all().all())
             percentuais_fecham = bool(participacao.sum(axis=1).sub(100).abs().lt(1e-9).all())
+            ordem_cronologica = bool(incrementos.index.is_monotonic_increasing)
+            instantes_unicos = not bool(incrementos.index.has_duplicates)
 
             assert total_serie == total_fato, f"Divergência: série={total_serie}, fato={total_fato}"
             assert monotono, "Ao menos uma série acumulada diminuiu."
             assert percentuais_fecham, "Os percentuais por atualização não fecham em 100%."
+            assert ordem_cronologica, "As atualizações não estão em ordem cronológica."
+            assert instantes_unicos, "Existem atualizações duplicadas no eixo sequencial."
 
             validacao = pd.DataFrame({
                 "controle": [
                     "Total da série = total do fato",
                     "Séries acumuladas não diminuem",
                     "Percentuais fecham em 100% a cada atualização",
+                    "Atualizações seguem DT_BU_RECEBIDO",
+                    "Um ponto por segundo/lote nacional",
                 ],
-                "resultado": ["OK", "OK", "OK"],
-                "valor": [f"{total_serie:,}", monotono, percentuais_fecham],
+                "resultado": ["OK", "OK", "OK", "OK", "OK"],
+                "valor": [
+                    f"{total_serie:,}",
+                    monotono,
+                    percentuais_fecham,
+                    ordem_cronologica,
+                    instantes_unicos,
+                ],
             })
             display(validacao)
             '''
@@ -226,20 +251,21 @@ def main() -> None:
         ),
         markdown(
             """
-            ## Votos acumulados
+            ## Replay da apuração — porcentagem por atualização
 
-            Cada linha representa um candidato. O eixo horizontal segue a data/hora de recebimento
-            dos boletins; o eixo vertical mostra votos nominais acumulados.
-
-            A linha em degraus muda em cada horário de recebimento disponível na fonte. Passe o
-            cursor sobre um degrau para ver a data, a hora com segundos e o total naquele ponto.
+            Este é o gráfico principal. O eixo horizontal não representa minutos nem intervalos
+            artificiais: ele numera os lotes nacionais na ordem crescente de `DT_BU_RECEBIDO`.
+            O ponto 1 é a primeira atualização disponível, o ponto 2 é a seguinte, e assim por
+            diante. Cada linha mostra a porcentagem acumulada de votos válidos do candidato após
+            aquela atualização.
 
             **Zoom retangular:** a lupa já fica selecionada. Clique em um ponto vazio, mantenha o
-            botão do mouse pressionado e desenhe um retângulo sobre qualquer região. O gráfico
-            amplia exatamente essa área, nos eixos de tempo e votos. A faixa inferior também
-            aceita qualquer intervalo livre, sem períodos predefinidos. Um duplo clique restaura
-            a visão completa; a barra no canto superior direito permite alternar entre zoom e
-            deslocamento.
+            botão do mouse pressionado e desenhe um retângulo sobre qualquer região. A faixa
+            inferior permite escolher livremente qualquer sequência de atualizações. Um duplo
+            clique restaura a visão completa.
+
+            Ao passar o mouse sobre a linha, o gráfico mostra o número da atualização, horário
+            original, porcentagem, votos acumulados e votos que entraram naquele lote.
             """
         ),
         code(
@@ -247,58 +273,15 @@ def main() -> None:
             cores = {"LULA (13)": "#D62728", "JAIR BOLSONARO (22)": "#1F77B4"}
             local = "Brasil" if UF is None else UF.upper()
             fig = go.Figure()
-            for candidato in acumulado.columns:
-                detalhes = pd.concat(
-                    [participacao[candidato], incrementos[candidato]],
-                    axis=1,
-                ).to_numpy()
-                fig.add_trace(go.Scatter(
-                    x=acumulado.index,
-                    y=acumulado[candidato],
-                    customdata=detalhes,
-                    name=candidato,
-                    mode="lines+markers",
-                    line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
-                    marker={"size": 3, "color": cores.get(candidato)},
-                    hovertemplate=(
-                        "<b>%{fullData.name}</b><br>"
-                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
-                        "Quantidade acumulada: %{y:,.0f} votos<br>"
-                        "Percentual dos válidos: %{customdata[0]:.4f}%<br>"
-                        "Nesta atualização: +%{customdata[1]:,.0f} votos"
-                        "<extra></extra>"
-                    ),
-                ))
-
-            configurar_tempo(
-                fig,
-                f"Evolução dos votos acumulados — {local}",
-                "Votos nominais acumulados",
-            )
-            fig.update_yaxes(tickformat=",.0f")
-            fig.show(config=CONFIG_GRAFICO)
-            """
-        ),
-        markdown(
-            """
-            ## Participação nos votos válidos ao longo da apuração
-
-            Este gráfico usa apenas os candidatos selecionados; branco e nulo não entram no
-            denominador. Oscilações no início refletem poucos boletins recebidos. Os mesmos
-            controles de zoom do gráfico anterior estão disponíveis aqui.
-            """
-        ),
-        code(
-            """
-            fig = go.Figure()
             for candidato in participacao.columns:
                 detalhes = pd.concat(
                     [acumulado[candidato], incrementos[candidato]],
                     axis=1,
                 ).to_numpy()
                 fig.add_trace(go.Scatter(
-                    x=participacao.index,
+                    x=ordem_atualizacao,
                     y=participacao[candidato],
+                    text=horarios_texto,
                     customdata=detalhes,
                     name=candidato,
                     mode="lines+markers",
@@ -306,17 +289,18 @@ def main() -> None:
                     marker={"size": 3, "color": cores.get(candidato)},
                     hovertemplate=(
                         "<b>%{fullData.name}</b><br>"
-                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
+                        "Atualização: %{x:,.0f}<br>"
+                        "Horário: %{text}<br>"
                         "Percentual dos válidos: %{y:.4f}%<br>"
                         "Quantidade acumulada: %{customdata[0]:,.0f} votos<br>"
-                        "Nesta atualização: +%{customdata[1]:,.0f} votos"
+                        "Votos neste lote: +%{customdata[1]:,.0f}"
                         "<extra></extra>"
                     ),
                 ))
 
-            configurar_tempo(
+            configurar_replay(
                 fig,
-                f"Percentual dos votos válidos durante a apuração — {local}",
+                f"Replay da apuração: percentual após cada atualização — {local}",
                 "Participação nos votos válidos (%)",
             )
             fig.update_yaxes(ticksuffix="%", rangemode="normal")
@@ -325,11 +309,55 @@ def main() -> None:
         ),
         markdown(
             """
-            ## Variação a cada atualização
+            ## Quantidade acumulada por atualização
 
-            Este gráfico mostra quantos votos de cada candidato entraram em cada horário distinto
-            de recebimento, sem agrupar por minuto ou por intervalos de 15 minutos. Use o zoom para
-            separar os pontos que ficam sobrepostos quando todo o período está visível.
+            A mesma sequência original, agora mostrando a quantidade acumulada de votos nominais.
+            O horário e o percentual continuam disponíveis ao passar o mouse sobre cada linha.
+            """
+        ),
+        code(
+            """
+            fig = go.Figure()
+            for candidato in acumulado.columns:
+                detalhes = pd.concat(
+                    [participacao[candidato], incrementos[candidato]],
+                    axis=1,
+                ).to_numpy()
+                fig.add_trace(go.Scatter(
+                    x=ordem_atualizacao,
+                    y=acumulado[candidato],
+                    text=horarios_texto,
+                    customdata=detalhes,
+                    name=candidato,
+                    mode="lines+markers",
+                    line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
+                    marker={"size": 3, "color": cores.get(candidato)},
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "Atualização: %{x:,.0f}<br>"
+                        "Horário: %{text}<br>"
+                        "Quantidade acumulada: %{y:,.0f} votos<br>"
+                        "Percentual dos válidos: %{customdata[0]:.4f}%<br>"
+                        "Votos neste lote: +%{customdata[1]:,.0f}"
+                        "<extra></extra>"
+                    ),
+                ))
+
+            configurar_replay(
+                fig,
+                f"Votos acumulados após cada atualização — {local}",
+                "Votos nominais acumulados",
+            )
+            fig.update_yaxes(tickformat=",.0f")
+            fig.show(config=CONFIG_GRAFICO)
+            """
+        ),
+        markdown(
+            """
+            ## Votos adicionados em cada atualização
+
+            Este gráfico mostra o tamanho de cada lote na mesma ordem do replay. Ele ajuda a
+            investigar se mudanças de porcentagem coincidem com lotes maiores ou menores.
             """
         ),
         code(
@@ -341,8 +369,9 @@ def main() -> None:
                     axis=1,
                 ).to_numpy()
                 fig.add_trace(go.Scatter(
-                    x=incrementos.index,
+                    x=ordem_atualizacao,
                     y=incrementos[candidato],
+                    text=horarios_texto,
                     customdata=detalhes,
                     name=candidato,
                     mode="lines+markers",
@@ -350,18 +379,19 @@ def main() -> None:
                     marker={"size": 3, "color": cores.get(candidato)},
                     hovertemplate=(
                         "<b>%{fullData.name}</b><br>"
-                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
-                        "Nesta atualização: +%{y:,.0f} votos<br>"
+                        "Atualização: %{x:,.0f}<br>"
+                        "Horário: %{text}<br>"
+                        "Votos neste lote: +%{y:,.0f}<br>"
                         "Quantidade acumulada: %{customdata[0]:,.0f} votos<br>"
                         "Percentual dos válidos: %{customdata[1]:.4f}%"
                         "<extra></extra>"
                     ),
                 ))
 
-            configurar_tempo(
+            configurar_replay(
                 fig,
                 f"Votos adicionados em cada atualização — {local}",
-                "Votos adicionados na atualização",
+                "Votos adicionados no lote",
             )
             fig.update_yaxes(tickformat=",.0f")
             fig.show(config=CONFIG_GRAFICO)
