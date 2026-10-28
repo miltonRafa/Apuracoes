@@ -31,6 +31,12 @@ relógio produziria uma interpretação incorreta.
 2. No nível de segundos, a correlação do volume de votos válidos atinge o maior valor
    com recebimentos antecedendo a totalização em 61 segundos: `r = 0,395`. Excluindo pares
    em que os dois fluxos são zero, o pico permanece em 61 segundos e cai para `r = 0,270`.
+   “Os dois fluxos são zero” significa que, depois de aplicar o atraso, não houve votos
+   válidos recebidos no primeiro segundo nem votos válidos acrescentados à totalização no
+   segundo correspondente. É ausência de movimento naquele par de segundos, não um BU com
+   zero votos, retirada de votos ou retorno do acumulado a zero. No pico de 61 segundos,
+   isso ocorre em 13.979 dos 26.173 pares (53,4%); os outros 12.194 pares têm movimento em
+   pelo menos um dos fluxos.
 3. Agregando por minuto, o volume recebido em `t` e o totalizado em `t + 1` apresentam
    `r = 0,987` (`r = 0,985` sem minutos em que ambos são zero). A participação de Lula
    nos dois fluxos apresenta `r = 0,812`.
@@ -46,6 +52,21 @@ atualização. Ainda assim, os horários permitem delimitar **rajadas observáve
 totalização. Dentro dessas rajadas, os intervalos consecutivos ficam entre 1 e 9 segundos;
 não há intervalos de 10, 11 ou 12 segundos; o próximo valor observado é 13 segundos. Por
 isso, esta análise considera que uma pausa de pelo menos 10 segundos inicia um novo bloco.
+
+| Intervalo | Ocorrências |
+| --- | ---: |
+| 1–3 segundos | 4.934 |
+| 4–6 segundos | 66 |
+| 7–9 segundos | 9 |
+| 10–12 segundos | **0** |
+| 13–19 segundos | 25 |
+| 20 segundos ou mais | 251 |
+
+Os 5.285 intervalos estão representados na tabela. Como a faixa de 10 a 12 segundos está
+vazia, qualquer limiar entre 10 e 13 segundos produz os mesmos 277 blocos. O corte fica,
+portanto, numa separação observável dos dados, em vez de dividir um conjunto frequente de
+intervalos iguais. Isso sustenta seu uso para visualização, mas não comprova que as rajadas
+sejam lotes internos indivisíveis.
 
 Esse critério encontra 277 blocos. Dos 276 intervalos entre seus inícios, 253 (91,7%) ficam
 entre 55 e 70 segundos, e a mediana é 65 segundos. Isso confirma que o padrão visual próximo

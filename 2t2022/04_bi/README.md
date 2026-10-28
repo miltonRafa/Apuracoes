@@ -101,7 +101,9 @@ mouse. Para recriar somente o notebook:
 - 472.028 BUs de Presidente representados no BWeb;
 - pico da correlação por segundo com defasagem de 61 segundos;
 - correlação no pico de `0,395` contando toda a grade de segundos e `0,270` quando pares
-  em que ambos os fluxos são zero são excluídos;
+  sem movimento em ambos os fluxos são excluídos; isso quer dizer que naquele segundo não
+  houve votos válidos recebidos nem, após a defasagem, votos válidos acrescentados à
+  totalização — não significa BU sem votos nem retirada de votos;
 - correlação de `0,987` entre votos válidos recebidos por minuto e totalizados no minuto
   seguinte (`0,985` sem minutos em que ambos são zero);
 - correlação de `0,812` entre a participação de Lula nesses dois fluxos;

@@ -336,6 +336,31 @@ def main() -> None:
             intervalos_positivos = intervalos_atualizacao.dropna()
             assert not intervalos_positivos.between(10, 12).any()
 
+            tabela_distribuicao_intervalos = pd.DataFrame({
+                "Intervalo": [
+                    "1–3 segundos",
+                    "4–6 segundos",
+                    "7–9 segundos",
+                    "10–12 segundos",
+                    "13–19 segundos",
+                    "20 segundos ou mais",
+                ],
+                "Ocorrências": [
+                    int(intervalos_positivos.between(1, 3).sum()),
+                    int(intervalos_positivos.between(4, 6).sum()),
+                    int(intervalos_positivos.between(7, 9).sum()),
+                    int(intervalos_positivos.between(10, 12).sum()),
+                    int(intervalos_positivos.between(13, 19).sum()),
+                    int(intervalos_positivos.ge(20).sum()),
+                ],
+            })
+            assert tabela_distribuicao_intervalos["Ocorrências"].tolist() == [
+                4934, 66, 9, 0, 25, 251,
+            ]
+            assert int(tabela_distribuicao_intervalos["Ocorrências"].sum()) == len(
+                intervalos_positivos
+            )
+
             dados_blocos = dados.copy()
             dados_blocos["ORDEM_ATUALIZACAO"] = np.arange(1, len(dados_blocos) + 1)
             dados_blocos["BLOCO_OBSERVADO"] = (
@@ -744,6 +769,11 @@ def main() -> None:
             10, 11 ou 12 segundos; o próximo intervalo observado começa em 13 segundos. Assim,
             uma pausa de pelo menos 10 segundos inicia um novo **bloco observado**.
 
+            A tabela calculada abaixo mostra todos os 5.285 intervalos consecutivos. O corte de
+            10 segundos fica numa faixa vazia dos dados, e qualquer limiar de 10 a 13 segundos
+            produz os mesmos 277 blocos. Isso torna a divisão estável para visualização, mas não
+            transforma os blocos observados em lotes internos comprovados.
+
             No gráfico principal, as faixas claras azuis e amarelas apenas alternam os blocos.
             As linhas originais continuam vermelha para Lula e azul para Bolsonaro. A tabela
             abaixo facilita a consulta dos horários e das quantidades de cada bloco.
@@ -751,6 +781,8 @@ def main() -> None:
         ),
         code(
             '''
+            display(tabela_distribuicao_intervalos)
+
             tabela_blocos_exibicao = blocos_observados[[
                 "BLOCO_OBSERVADO",
                 "inicio_totalizacao",
@@ -1108,6 +1140,13 @@ def main() -> None:
             **Como ler:** procure o ponto mais alto da linha. Ele indica o deslocamento de tempo
             que torna os dois fluxos mais parecidos. A correlação não é uma probabilidade: `0,395`
             não significa “39,5% de chance”.
+
+            **O que significa “os dois fluxos são zero”:** depois de aplicar um atraso, comparamos
+            dois segundos. No primeiro, nenhum voto válido aparece nos BUs com horário de
+            recebimento naquele segundo; no segundo correspondente, não há votos válidos
+            acrescentados pelo histórico oficial. Isso significa **ausência de movimento naquele
+            par de segundos**, e não que os BUs tenham zero votos, que votos tenham desaparecido
+            ou que o total acumulado tenha voltado a zero.
             """
         ),
         code(
@@ -1215,6 +1254,28 @@ def main() -> None:
             pico_correlacao_validos_sem_alertas = float(
                 correlacao_validos_sem_alertas.max()
             )
+            recebidos_no_pico = recebidos_segundo["validos"].to_numpy()[
+                :-pico_atraso_validos
+            ]
+            totalizados_no_pico = totalizados_segundo["validos"].to_numpy()[
+                pico_atraso_validos:
+            ]
+            pares_ambos_zero = (
+                (recebidos_no_pico == 0) & (totalizados_no_pico == 0)
+            )
+            quantidade_pares_pico = len(recebidos_no_pico)
+            quantidade_pares_ambos_zero = int(pares_ambos_zero.sum())
+            quantidade_pares_com_movimento = int((~pares_ambos_zero).sum())
+            percentual_pares_ambos_zero = (
+                quantidade_pares_ambos_zero / quantidade_pares_pico * 100
+            )
+            quantidade_pares_ambos_zero_texto = (
+                f"{quantidade_pares_ambos_zero:,}".replace(",", ".")
+            )
+            quantidade_pares_pico_texto = f"{quantidade_pares_pico:,}".replace(",", ".")
+            assert quantidade_pares_pico == 26173
+            assert quantidade_pares_ambos_zero == 13979
+            assert quantidade_pares_com_movimento == 12194
             fig_atraso.add_trace(go.Scatter(
                 x=atrasos,
                 y=correlacoes_segundo["validos"],
@@ -1277,6 +1338,23 @@ def main() -> None:
             )
             fig_atraso.show(config=CONFIG_GRAFICO)
             display(pd.DataFrame({
+                "pares_no_atraso_de_61_segundos": [
+                    "Ambos sem movimento",
+                    "Pelo menos um fluxo com movimento",
+                    "Total",
+                ],
+                "quantidade": [
+                    quantidade_pares_ambos_zero,
+                    quantidade_pares_com_movimento,
+                    quantidade_pares_pico,
+                ],
+                "percentual": [
+                    percentual_pares_ambos_zero,
+                    100 - percentual_pares_ambos_zero,
+                    100.0,
+                ],
+            }))
+            display(pd.DataFrame({
                 "cenário": [
                     "Todos os segundos",
                     "Somente segundos com movimento",
@@ -1297,7 +1375,10 @@ def main() -> None:
                 f"**Conclusão:** o fluxo de votos recebidos fica mais parecido com o fluxo "
                 f"totalizado quando é deslocado **{pico_atraso_validos} segundos para a "
                 f"frente** (correlação {pico_correlacao_validos:.3f}). Excluindo os pares em "
-                f"que os dois fluxos são zero, o pico fica em **{pico_atraso_validos_ativos} "
+                f"que os dois fluxos estão sem movimento — **{quantidade_pares_ambos_zero_texto} "
+                f"de {quantidade_pares_pico_texto} pares "
+                f"({percentual_pares_ambos_zero:.1f}%)** —, "
+                f"o pico fica em **{pico_atraso_validos_ativos} "
                 f"segundos** (correlação {pico_correlacao_validos_ativos:.3f}). "
                 f"Ao excluir os **{quantidade_alertas_recebimento_presidente}** BUs com "
                 f"recebimento anterior à emissão, o pico permanece em "
