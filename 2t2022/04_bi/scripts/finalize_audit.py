@@ -12,7 +12,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BI_ROOT = ROOT / "04_bi"
 AUDIT_DIR = BI_ROOT / "auditoria"
+CHART_DIR = BI_ROOT / "graficos"
 MANIFEST = AUDIT_DIR / "manifesto_saidas.csv"
+GENERATED_CHARTS = (
+    "correlacao_defasagem.svg",
+    "distribuicao_intervalos.svg",
+    "evolucao_percentual_blocos.svg",
+)
 GENERATED_AUDIT_FILES = (
     "RELATORIO_VALIDACAO.md",
     "alertas_temporais.csv",
@@ -37,6 +43,7 @@ def sha256(path: Path) -> str:
 def expected_outputs() -> list[Path]:
     paths = [path for path in (BI_ROOT / "dados").rglob("*") if path.is_file()]
     paths.extend(path for path in (BI_ROOT / "notebooks").glob("*.ipynb") if path.is_file())
+    paths.extend(CHART_DIR / name for name in GENERATED_CHARTS)
     paths.extend(AUDIT_DIR / name for name in GENERATED_AUDIT_FILES)
     missing = [path for path in paths if not path.is_file()]
     if missing:

@@ -142,4 +142,5 @@ mas não permite nomear os BUs que formaram aquela atualização.
 
 Os cálculos, as tabelas e os gráficos interativos estão no notebook
 `../notebooks/analise_evolucao_votos.ipynb` e são recriados por
-`../scripts/create_analysis_notebook.py`.
+`../scripts/create_analysis_notebook.py`. O mesmo processo exporta três versões vetoriais
+para `../graficos/`, incorporadas aos READMEs sem uso de capturas de tela.

@@ -59,13 +59,20 @@ def main() -> None:
             from pathlib import Path
 
             import duckdb
+            import matplotlib.pyplot as plt
             import numpy as np
             import pandas as pd
             import plotly.graph_objects as go
             import plotly.io as pio
             from IPython.display import Markdown, display
+            from matplotlib.ticker import PercentFormatter
 
             pio.renderers.default = "plotly_mimetype"
+            plt.rcParams.update({
+                "font.family": "DejaVu Sans",
+                "svg.fonttype": "none",
+                "svg.hashsalt": "apuracoes-2t2022",
+            })
 
             NOME_ARQUIVO_HISTORICO = "Historico_Totalizacao_Presidente_BR_2T_2022.csv"
             SHA256_HISTORICO_ESPERADO = (
@@ -90,6 +97,8 @@ def main() -> None:
                 raise FileNotFoundError("Não foi possível localizar 2t2022/04_bi/dados/fato_votos")
 
             RAIZ_2T2022 = localizar_raiz_2t2022(Path.cwd())
+            PASTA_GRAFICOS = RAIZ_2T2022 / "04_bi" / "graficos"
+            PASTA_GRAFICOS.mkdir(parents=True, exist_ok=True)
             HISTORICO = (
                 RAIZ_2T2022 / "04_bi" / "fontes" / "historico_totalizacao"
                 / NOME_ARQUIVO_HISTORICO
@@ -105,6 +114,23 @@ def main() -> None:
             FATOS_BOLETINS = (
                 RAIZ_2T2022 / "04_bi" / "dados" / "fato_boletins" / "**" / "*.parquet"
             )
+
+            def salvar_figura_svg(figura, nome_arquivo):
+                destino = PASTA_GRAFICOS / nome_arquivo
+                temporario = destino.with_name(destino.name + ".part")
+                figura.savefig(
+                    temporario,
+                    format="svg",
+                    bbox_inches="tight",
+                    metadata={"Date": None, "Creator": "Apurações 2T 2022"},
+                )
+                svg_normalizado = "\\n".join(
+                    linha.rstrip()
+                    for linha in temporario.read_text(encoding="utf-8").splitlines()
+                ) + "\\n"
+                temporario.write_text(svg_normalizado, encoding="utf-8")
+                temporario.replace(destino)
+                plt.close(figura)
 
             pd.set_option("display.max_rows", 20)
             pd.set_option("display.float_format", lambda valor: f"{valor:,.6f}")
@@ -753,6 +779,37 @@ def main() -> None:
                     ],
                 }],
             )
+
+            figura_readme, eixo_readme = plt.subplots(figsize=(13.5, 6.2))
+            for linha in blocos_observados.itertuples(index=False):
+                eixo_readme.axvspan(
+                    linha.primeira_atualizacao - 0.5,
+                    linha.ultima_atualizacao + 0.5,
+                    color=cores_fundo_blocos[(linha.BLOCO_OBSERVADO - 1) % 2],
+                    alpha=0.38,
+                    linewidth=0,
+                )
+            for candidato in candidatos:
+                eixo_readme.plot(
+                    ordem_atualizacao,
+                    participacao[candidato],
+                    label=candidato,
+                    color=cores[candidato],
+                    linewidth=1.4,
+                    drawstyle="steps-post",
+                )
+            eixo_readme.set(
+                title="Percentual oficial dos votos válidos durante a totalização — Brasil",
+                xlabel="Ordem oficial das 5.286 atualizações",
+                ylabel="Participação nos votos válidos",
+                xlim=(1, len(dados)),
+            )
+            eixo_readme.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+            eixo_readme.grid(axis="y", color="#D9E2F2", linewidth=0.8)
+            eixo_readme.legend(loc="best", frameon=False, ncol=2)
+            figura_readme.tight_layout()
+            salvar_figura_svg(figura_readme, "evolucao_percentual_blocos.svg")
+
             fig.show(config=CONFIG_GRAFICO)
             '''
         ),
@@ -782,6 +839,34 @@ def main() -> None:
         code(
             '''
             display(tabela_distribuicao_intervalos)
+
+            figura_intervalos, eixo_intervalos = plt.subplots(figsize=(12.5, 5.4))
+            valores_intervalos = tabela_distribuicao_intervalos["Ocorrências"].to_numpy()
+            barras_intervalos = eixo_intervalos.bar(
+                tabela_distribuicao_intervalos["Intervalo"],
+                valores_intervalos,
+                color=["#4C78A8", "#4C78A8", "#4C78A8", "#E45756", "#F2CF5B", "#72B7B2"],
+            )
+            eixo_intervalos.set_yscale("symlog", linthresh=1)
+            eixo_intervalos.set(
+                title="Distribuição dos intervalos entre atualizações consecutivas",
+                xlabel="Distância entre horários oficiais",
+                ylabel="Ocorrências — escala logarítmica",
+            )
+            eixo_intervalos.grid(axis="y", color="#D9E2F2", linewidth=0.8)
+            for barra, valor in zip(barras_intervalos, valores_intervalos, strict=True):
+                rotulo = f"{int(valor):,}".replace(",", ".")
+                eixo_intervalos.annotate(
+                    rotulo,
+                    (barra.get_x() + barra.get_width() / 2, float(valor)),
+                    xytext=(0, 5),
+                    textcoords="offset points",
+                    ha="center",
+                    va="bottom",
+                    fontweight="bold" if valor == 0 else "normal",
+                )
+            figura_intervalos.tight_layout()
+            salvar_figura_svg(figura_intervalos, "distribuicao_intervalos.svg")
 
             tabela_blocos_exibicao = blocos_observados[[
                 "BLOCO_OBSERVADO",
@@ -1336,6 +1421,55 @@ def main() -> None:
                 legend={"orientation": "h", "y": 1.08, "yanchor": "bottom"},
                 margin={"l": 85, "r": 45, "t": 85, "b": 75},
             )
+
+            figura_correlacao, eixo_correlacao = plt.subplots(figsize=(12.5, 5.8))
+            eixo_correlacao.plot(
+                atrasos,
+                correlacoes_segundo["validos"],
+                color="#2CA02C",
+                linewidth=2.2,
+                label="Todos os segundos",
+            )
+            eixo_correlacao.plot(
+                atrasos,
+                correlacoes_segundo_ativos["validos"],
+                color="#6F42C1",
+                linewidth=1.8,
+                linestyle="--",
+                label="Somente segundos com movimento",
+            )
+            eixo_correlacao.axvline(
+                pico_atraso_validos,
+                color="#333333",
+                linewidth=1.2,
+                linestyle=":",
+            )
+            eixo_correlacao.scatter(
+                [pico_atraso_validos, pico_atraso_validos_ativos],
+                [pico_correlacao_validos, pico_correlacao_validos_ativos],
+                color=["#145A32", "#6F42C1"],
+                zorder=3,
+            )
+            eixo_correlacao.annotate(
+                f"Pico: {pico_atraso_validos} s\\nr = {pico_correlacao_validos:.3f}",
+                (pico_atraso_validos, pico_correlacao_validos),
+                xytext=(12, -28),
+                textcoords="offset points",
+                ha="left",
+                va="top",
+                bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "alpha": 0.85},
+            )
+            eixo_correlacao.set(
+                title="Correlação entre recebimento e totalização por defasagem",
+                xlabel="Defasagem aplicada ao fluxo recebido (segundos)",
+                ylabel="Correlação de Pearson",
+                xlim=(0, 180),
+            )
+            eixo_correlacao.grid(color="#D9E2F2", linewidth=0.8)
+            eixo_correlacao.legend(loc="best", frameon=False)
+            figura_correlacao.tight_layout()
+            salvar_figura_svg(figura_correlacao, "correlacao_defasagem.svg")
+
             fig_atraso.show(config=CONFIG_GRAFICO)
             display(pd.DataFrame({
                 "pares_no_atraso_de_61_segundos": [

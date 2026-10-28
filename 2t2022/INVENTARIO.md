@@ -49,6 +49,7 @@ PDFs de leia-me únicos por SHA-256: 1.
 - `04_bi/executar_pipeline.sh`: reconstrói e revalida toda a camada sem alterar os dados originais.
 - `04_bi/scripts/prepare_sources.py`: descobre os links na API do TSE, baixa, valida SHA-512 e extrai as fontes.
 - `04_bi/notebooks/analise_evolucao_votos.ipynb`: gráficos executados das 5.286 atualizações oficiais, com zoom retangular, variação por atualização e faixas de fundo para 277 blocos observados no gráfico principal.
+- `04_bi/graficos/`: três SVGs vetoriais gerados pelo notebook e incorporados aos READMEs.
 - `04_bi/auditoria/blocos_totalizacao.csv`: tabela dos blocos observados com início, fim, duração, seções, votos, composição e efeito percentual.
 
 ## Histórico oficial da totalização

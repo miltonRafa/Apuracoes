@@ -25,6 +25,7 @@ A explicação completa, incluindo limites da análise, está em
 ├── fontes/historico_totalizacao/   CSV oficial e leia-me preservados
 ├── dados/                           Parquets gerados pelo pipeline
 ├── auditoria/                       validações e síntese da correlação
+├── graficos/                         SVGs vetoriais usados nos READMEs
 ├── notebooks/                       análise executada com gráficos interativos
 └── scripts/                         preparação, construção, validação e notebook
 ```
@@ -86,8 +87,25 @@ O notebook contém:
 5. comparação por minuto entre BUs recebidos, atualizações totalizadas e quedas posteriores;
 6. tabelas de reconciliação e da fila agregada disponível até o mesmo segundo das maiores quedas.
 
+## Gráficos principais
+
+Os gráficos abaixo são SVGs vetoriais gerados automaticamente pelo mesmo código do notebook,
+e não capturas de tela. Clique em qualquer gráfico para abrir a análise interativa completa.
+
+### Evolução percentual e blocos observados
+
+[![Evolução percentual dos candidatos com os blocos observados](graficos/evolucao_percentual_blocos.svg)](notebooks/analise_evolucao_votos.ipynb)
+
+### Distribuição dos intervalos entre atualizações
+
+[![Distribuição dos intervalos entre atualizações consecutivas](graficos/distribuicao_intervalos.svg)](notebooks/analise_evolucao_votos.ipynb)
+
+### Correlação por defasagem
+
+[![Correlação entre recebimento e totalização por defasagem](graficos/correlacao_defasagem.svg)](notebooks/analise_evolucao_votos.ipynb)
+
 Todos os gráficos aceitam zoom retangular, seleção pela legenda e detalhes ao passar o
-mouse. Para recriar somente o notebook:
+mouse dentro do notebook. Para recriar o notebook e os SVGs:
 
 ```bash
 .venv/bin/python 04_bi/scripts/create_analysis_notebook.py
