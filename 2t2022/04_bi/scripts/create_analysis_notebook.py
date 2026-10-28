@@ -80,6 +80,7 @@ def main() -> None:
                 "displayModeBar": True,
                 "displaylogo": False,
                 "responsive": True,
+                "doubleClick": "reset+autosize",
                 "toImageButtonOptions": {"format": "png", "scale": 2},
             }
 
@@ -88,7 +89,9 @@ def main() -> None:
                     title={"text": titulo, "x": 0.02, "xanchor": "left"},
                     height=650,
                     template="plotly_white",
-                    hovermode="x unified",
+                    hovermode="closest",
+                    hoverdistance=30,
+                    spikedistance=-1,
                     dragmode="zoom",
                     legend={"title": {"text": "Candidato"}, "orientation": "h", "y": 1.08},
                     margin={"l": 75, "r": 35, "t": 105, "b": 85},
@@ -96,20 +99,18 @@ def main() -> None:
                         "title": "Recebimento do boletim de urna",
                         "type": "date",
                         "rangeslider": {"visible": True, "thickness": 0.10},
-                        "rangeselector": {
-                            "buttons": [
-                                {"count": 15, "label": "15 min", "step": "minute", "stepmode": "backward"},
-                                {"count": 1, "label": "1 h", "step": "hour", "stepmode": "backward"},
-                                {"count": 6, "label": "6 h", "step": "hour", "stepmode": "backward"},
-                                {"step": "all", "label": "Tudo"},
-                            ],
-                            "x": 0,
-                            "y": 1.16,
-                        },
                         "showspikes": True,
                         "spikemode": "across",
+                        "spikesnap": "data",
                     },
-                    yaxis={"title": eixo_y, "rangemode": "tozero", "separatethousands": True},
+                    yaxis={
+                        "title": eixo_y,
+                        "rangemode": "tozero",
+                        "separatethousands": True,
+                        "showspikes": True,
+                        "spikemode": "across",
+                        "spikesnap": "data",
+                    },
                 )
                 return figura
 
@@ -168,6 +169,7 @@ def main() -> None:
             )
             incrementos.index.name = "instante"
             acumulado = incrementos.cumsum()
+            participacao = acumulado.div(acumulado.sum(axis=1), axis=0).mul(100).fillna(0)
 
             print(f"Período: {acumulado.index.min()} a {acumulado.index.max()}")
             print(f"Atualizações distintas no segundo: {len(acumulado):,}")
@@ -195,14 +197,20 @@ def main() -> None:
             total_fato = con.execute(consulta_total, parametros).fetchone()[0]
             total_serie = int(incrementos.to_numpy().sum())
             monotono = bool(acumulado.diff().fillna(acumulado).ge(0).all().all())
+            percentuais_fecham = bool(participacao.sum(axis=1).sub(100).abs().lt(1e-9).all())
 
             assert total_serie == total_fato, f"Divergência: série={total_serie}, fato={total_fato}"
             assert monotono, "Ao menos uma série acumulada diminuiu."
+            assert percentuais_fecham, "Os percentuais por atualização não fecham em 100%."
 
             validacao = pd.DataFrame({
-                "controle": ["Total da série = total do fato", "Séries acumuladas não diminuem"],
-                "resultado": ["OK", "OK"],
-                "valor": [f"{total_serie:,}", monotono],
+                "controle": [
+                    "Total da série = total do fato",
+                    "Séries acumuladas não diminuem",
+                    "Percentuais fecham em 100% a cada atualização",
+                ],
+                "resultado": ["OK", "OK", "OK"],
+                "valor": [f"{total_serie:,}", monotono, percentuais_fecham],
             })
             display(validacao)
             '''
@@ -226,10 +234,12 @@ def main() -> None:
             A linha em degraus muda em cada horário de recebimento disponível na fonte. Passe o
             cursor sobre um degrau para ver a data, a hora com segundos e o total naquele ponto.
 
-            **Zoom interativo:** arraste sobre qualquer trecho para ampliar; use a roda do mouse
-            sobre o gráfico; mova as alças da faixa inferior; ou use os botões `15 min`, `1 h`,
-            `6 h` e `Tudo`. A barra no canto superior direito permite alternar entre zoom e
-            deslocamento. Um duplo clique restaura a visão completa.
+            **Zoom retangular:** a lupa já fica selecionada. Clique em um ponto vazio, mantenha o
+            botão do mouse pressionado e desenhe um retângulo sobre qualquer região. O gráfico
+            amplia exatamente essa área, nos eixos de tempo e votos. A faixa inferior também
+            aceita qualquer intervalo livre, sem períodos predefinidos. Um duplo clique restaura
+            a visão completa; a barra no canto superior direito permite alternar entre zoom e
+            deslocamento.
             """
         ),
         code(
@@ -238,14 +248,26 @@ def main() -> None:
             local = "Brasil" if UF is None else UF.upper()
             fig = go.Figure()
             for candidato in acumulado.columns:
+                detalhes = pd.concat(
+                    [participacao[candidato], incrementos[candidato]],
+                    axis=1,
+                ).to_numpy()
                 fig.add_trace(go.Scatter(
                     x=acumulado.index,
                     y=acumulado[candidato],
+                    customdata=detalhes,
                     name=candidato,
                     mode="lines+markers",
                     line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
                     marker={"size": 3, "color": cores.get(candidato)},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: %{y:,.0f} votos<extra></extra>",
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
+                        "Quantidade acumulada: %{y:,.0f} votos<br>"
+                        "Percentual dos válidos: %{customdata[0]:.4f}%<br>"
+                        "Nesta atualização: +%{customdata[1]:,.0f} votos"
+                        "<extra></extra>"
+                    ),
                 ))
 
             configurar_tempo(
@@ -268,16 +290,28 @@ def main() -> None:
         ),
         code(
             """
-            participacao = acumulado.div(acumulado.sum(axis=1), axis=0).mul(100).fillna(0)
             fig = go.Figure()
             for candidato in participacao.columns:
+                detalhes = pd.concat(
+                    [acumulado[candidato], incrementos[candidato]],
+                    axis=1,
+                ).to_numpy()
                 fig.add_trace(go.Scatter(
                     x=participacao.index,
                     y=participacao[candidato],
+                    customdata=detalhes,
                     name=candidato,
-                    mode="lines",
+                    mode="lines+markers",
                     line={"width": 2.2, "color": cores.get(candidato), "shape": "hv"},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: %{y:.4f}%<extra></extra>",
+                    marker={"size": 3, "color": cores.get(candidato)},
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
+                        "Percentual dos válidos: %{y:.4f}%<br>"
+                        "Quantidade acumulada: %{customdata[0]:,.0f} votos<br>"
+                        "Nesta atualização: +%{customdata[1]:,.0f} votos"
+                        "<extra></extra>"
+                    ),
                 ))
 
             configurar_tempo(
@@ -302,14 +336,26 @@ def main() -> None:
             """
             fig = go.Figure()
             for candidato in incrementos.columns:
+                detalhes = pd.concat(
+                    [acumulado[candidato], participacao[candidato]],
+                    axis=1,
+                ).to_numpy()
                 fig.add_trace(go.Scatter(
                     x=incrementos.index,
                     y=incrementos[candidato],
+                    customdata=detalhes,
                     name=candidato,
                     mode="lines+markers",
                     line={"width": 1.2, "color": cores.get(candidato)},
                     marker={"size": 3, "color": cores.get(candidato)},
-                    hovertemplate="%{x|%d/%m/%Y %H:%M:%S}<br>%{fullData.name}: +%{y:,.0f} votos<extra></extra>",
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "Horário: %{x|%d/%m/%Y %H:%M:%S}<br>"
+                        "Nesta atualização: +%{y:,.0f} votos<br>"
+                        "Quantidade acumulada: %{customdata[0]:,.0f} votos<br>"
+                        "Percentual dos válidos: %{customdata[1]:.4f}%"
+                        "<extra></extra>"
+                    ),
                 ))
 
             configurar_tempo(
@@ -347,6 +393,9 @@ def main() -> None:
 
             - A fonte informa recebimento com precisão de segundos, mas não uma sequência interna
               para boletins com o mesmo horário.
+            - Neste notebook, uma atualização é cada valor distinto de `DT_BU_RECEBIDO`. Os
+              arquivos de boletim não registram as chamadas ou atualizações visuais do painel
+              público do TSE.
             - Existem alertas temporais documentados em `04_bi/auditoria/alertas_temporais.csv`.
             - O notebook preserva os horários informados e não tenta corrigi-los por fuso ou por
               comparação com `DT_EMISSAO_BU`.
