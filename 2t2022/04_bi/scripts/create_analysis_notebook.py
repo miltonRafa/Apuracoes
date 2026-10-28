@@ -54,12 +54,12 @@ def main() -> None:
             from pathlib import Path
 
             import duckdb
-            import matplotlib.dates as mdates
-            import matplotlib.pyplot as plt
             import pandas as pd
+            import plotly.graph_objects as go
+            import plotly.io as pio
             from IPython.display import display
 
-            %matplotlib inline
+            pio.renderers.default = "plotly_mimetype"
 
             def localizar_raiz(inicio: Path) -> Path:
                 inicio = inicio.resolve()
@@ -72,10 +72,49 @@ def main() -> None:
             FATOS = RAIZ / "04_bi" / "dados" / "fato_votos" / "**" / "*.parquet"
             DIM_VOTAVEL = RAIZ / "04_bi" / "dados" / "dimensoes" / "dim_votavel.parquet"
 
-            plt.style.use("seaborn-v0_8-whitegrid")
-            plt.rcParams.update({"figure.figsize": (14, 7), "font.size": 11})
             pd.set_option("display.max_rows", 20)
             pd.set_option("display.float_format", lambda valor: f"{valor:,.2f}")
+
+            CONFIG_GRAFICO = {
+                "scrollZoom": True,
+                "displayModeBar": True,
+                "displaylogo": False,
+                "responsive": True,
+                "toImageButtonOptions": {"format": "png", "scale": 2},
+            }
+
+            def formatar_inteiro_br(valor):
+                return f"{int(valor):,}".replace(",", ".")
+
+            def configurar_tempo(figura, titulo, eixo_y):
+                figura.update_layout(
+                    title={"text": titulo, "x": 0.02, "xanchor": "left"},
+                    height=650,
+                    template="plotly_white",
+                    hovermode="x unified",
+                    dragmode="zoom",
+                    legend={"title": {"text": "Candidato"}, "orientation": "h", "y": 1.08},
+                    margin={"l": 75, "r": 35, "t": 105, "b": 85},
+                    xaxis={
+                        "title": "Recebimento do boletim de urna",
+                        "type": "date",
+                        "rangeslider": {"visible": True, "thickness": 0.10},
+                        "rangeselector": {
+                            "buttons": [
+                                {"count": 15, "label": "15 min", "step": "minute", "stepmode": "backward"},
+                                {"count": 1, "label": "1 h", "step": "hour", "stepmode": "backward"},
+                                {"count": 6, "label": "6 h", "step": "hour", "stepmode": "backward"},
+                                {"step": "all", "label": "Tudo"},
+                            ],
+                            "x": 0,
+                            "y": 1.16,
+                        },
+                        "showspikes": True,
+                        "spikemode": "across",
+                    },
+                    yaxis={"title": eixo_y, "rangemode": "tozero", "separatethousands": True},
+                )
+                return figura
 
             print(f"Raiz localizada: {RAIZ}")
             '''
@@ -189,32 +228,36 @@ def main() -> None:
 
             Cada linha representa um candidato. O eixo horizontal segue a data/hora de recebimento
             dos boletins; o eixo vertical mostra votos nominais acumulados.
+
+            **Zoom interativo:** arraste sobre qualquer trecho para ampliar; use a roda do mouse
+            sobre o gráfico; mova as alças da faixa inferior; ou use os botões `15 min`, `1 h`,
+            `6 h` e `Tudo`. A barra no canto superior direito permite alternar entre zoom e
+            deslocamento. Um duplo clique restaura a visão completa.
             """
         ),
         code(
             """
             cores = {"LULA (13)": "#D62728", "JAIR BOLSONARO (22)": "#1F77B4"}
-            fig, ax = plt.subplots()
-            for candidato in acumulado.columns:
-                ax.plot(
-                    acumulado.index,
-                    acumulado[candidato],
-                    label=candidato,
-                    linewidth=2.2,
-                    color=cores.get(candidato),
-                )
-
             local = "Brasil" if UF is None else UF.upper()
-            ax.set_title(f"Evolução dos votos acumulados — {local}", fontsize=16, weight="bold")
-            ax.set_xlabel("Recebimento do boletim de urna")
-            ax.set_ylabel("Votos nominais acumulados")
-            ax.ticklabel_format(style="plain", axis="y")
-            ax.yaxis.set_major_formatter(lambda x, pos: f"{x/1_000_000:.0f} mi" if x >= 1_000_000 else f"{x/1_000:.0f} mil")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m\\n%H:%M"))
-            ax.legend(title="Candidato", loc="upper left")
-            ax.grid(alpha=0.25)
-            fig.tight_layout()
-            plt.show()
+            fig = go.Figure()
+            for candidato in acumulado.columns:
+                fig.add_trace(go.Scatter(
+                    x=acumulado.index,
+                    y=acumulado[candidato],
+                    customdata=acumulado[candidato].map(formatar_inteiro_br),
+                    name=candidato,
+                    mode="lines",
+                    line={"width": 2.5, "color": cores.get(candidato)},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{customdata} votos<extra></extra>",
+                ))
+
+            configurar_tempo(
+                fig,
+                f"Evolução dos votos acumulados — {local}",
+                "Votos nominais acumulados",
+            )
+            fig.update_yaxes(tickformat=",.0f")
+            fig.show(config=CONFIG_GRAFICO)
             """
         ),
         markdown(
@@ -222,55 +265,63 @@ def main() -> None:
             ## Participação nos votos válidos ao longo da apuração
 
             Este gráfico usa apenas os candidatos selecionados; branco e nulo não entram no
-            denominador. Oscilações no início refletem poucos boletins recebidos.
+            denominador. Oscilações no início refletem poucos boletins recebidos. Os mesmos
+            controles de zoom do gráfico anterior estão disponíveis aqui.
             """
         ),
         code(
             """
             participacao = acumulado.div(acumulado.sum(axis=1), axis=0).mul(100).fillna(0)
-            fig, ax = plt.subplots()
+            fig = go.Figure()
             for candidato in participacao.columns:
-                ax.plot(
-                    participacao.index,
-                    participacao[candidato],
-                    label=candidato,
-                    linewidth=2.0,
-                    color=cores.get(candidato),
-                )
+                fig.add_trace(go.Scatter(
+                    x=participacao.index,
+                    y=participacao[candidato],
+                    name=candidato,
+                    mode="lines",
+                    line={"width": 2.3, "color": cores.get(candidato)},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{y:.4f}%<extra></extra>",
+                ))
 
-            ax.set_title(f"Percentual dos votos válidos durante a apuração — {local}", fontsize=16, weight="bold")
-            ax.set_xlabel("Recebimento do boletim de urna")
-            ax.set_ylabel("Participação nos votos válidos (%)")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m\\n%H:%M"))
-            ax.legend(title="Candidato", loc="best")
-            ax.grid(alpha=0.25)
-            fig.tight_layout()
-            plt.show()
+            configurar_tempo(
+                fig,
+                f"Percentual dos votos válidos durante a apuração — {local}",
+                "Participação nos votos válidos (%)",
+            )
+            fig.update_yaxes(ticksuffix="%", rangemode="normal")
+            fig.show(config=CONFIG_GRAFICO)
             """
         ),
-        markdown("## Ritmo de entrada dos votos"),
+        markdown(
+            """
+            ## Ritmo de entrada dos votos
+
+            O gráfico agrupa os votos em intervalos de 15 minutos e também permite ampliar
+            qualquer intervalo com os controles interativos.
+            """
+        ),
         code(
             """
             incrementos_15min = incrementos.resample("15min").sum()
-            fig, ax = plt.subplots()
+            fig = go.Figure()
             for candidato in incrementos_15min.columns:
-                ax.plot(
-                    incrementos_15min.index,
-                    incrementos_15min[candidato],
-                    label=candidato,
-                    linewidth=1.8,
-                    color=cores.get(candidato),
-                )
+                fig.add_trace(go.Scatter(
+                    x=incrementos_15min.index,
+                    y=incrementos_15min[candidato],
+                    customdata=incrementos_15min[candidato].map(formatar_inteiro_br),
+                    name=candidato,
+                    mode="lines",
+                    line={"width": 2.1, "color": cores.get(candidato)},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>%{fullData.name}: %{customdata} votos<extra></extra>",
+                ))
 
-            ax.set_title(f"Votos adicionados a cada 15 minutos — {local}", fontsize=16, weight="bold")
-            ax.set_xlabel("Recebimento do boletim de urna")
-            ax.set_ylabel("Votos recebidos no intervalo")
-            ax.ticklabel_format(style="plain", axis="y")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m\\n%H:%M"))
-            ax.legend(title="Candidato", loc="upper left")
-            ax.grid(alpha=0.25)
-            fig.tight_layout()
-            plt.show()
+            configurar_tempo(
+                fig,
+                f"Votos adicionados a cada 15 minutos — {local}",
+                "Votos recebidos no intervalo",
+            )
+            fig.update_yaxes(tickformat=",.0f")
+            fig.show(config=CONFIG_GRAFICO)
             """
         ),
         markdown("## Síntese automática"),
