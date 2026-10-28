@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Descobre, baixa, valida e extrai os boletins de urna publicados pelo TSE."""
+"""Descobre, baixa, valida e extrai as fontes de resultados publicadas pelo TSE."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
-from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -23,7 +22,23 @@ ZIP_DIR = DATA_ROOT / "01_origem_zip"
 CSV_DIR = DATA_ROOT / "02_dados_csv"
 DOC_DIR = DATA_ROOT / "03_documentacao"
 AUDIT_DIR = DATA_ROOT / "04_bi" / "auditoria"
+HISTORY_DIR = DATA_ROOT / "04_bi" / "fontes" / "historico_totalizacao"
 API_URL = "https://dadosabertos.tse.jus.br/api/3/action/package_show?id=resultados-{ano}-boletim-de-urna"
+RESOURCE_API_URL = "https://dadosabertos.tse.jus.br/api/3/action/resource_show?id={resource_id}"
+HISTORY_RESOURCE_PAGE = (
+    "https://dadosabertos.tse.jus.br/dataset/resultados-2022/resource/"
+    "7cd53725-5dc5-4954-aee9-7dbf4097d26c"
+)
+HISTORY_RESOURCE_ID = "7cd53725-5dc5-4954-aee9-7dbf4097d26c"
+HISTORY_PACKAGE_ID = "5db2c9ef-a63b-4c0c-a2ec-d08002f49897"
+HISTORY_ZIP_NAME = "Historico_Totalizacao_Presidente_BR_2T_2022.zip"
+HISTORY_ZIP_SHA256 = "1f12128fbcfacab755e0e83d9c0a350ed99ae68ea3d024aaa7bc58fe0c1dda3c"
+HISTORY_MEMBERS_SHA256 = {
+    "Historico_Totalizacao_Presidente_BR_2T_2022.csv": (
+        "00013c958f13b2cf1a842c4398ca7cb52cf5ef46d26ce91f99c1a0ad8d0f663d"
+    ),
+    "leiame.pdf": "453cf754ad71b7bd9bcd31303fd14aefdecb7d091388ba585706ebd3c03d763f",
+}
 EXPECTED_UFS = {
     "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
     "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "ZZ",
@@ -69,10 +84,10 @@ def fetch_small_file(url: str, destination: Path) -> None:
 
 def download_with_resume(url: str, destination: Path) -> None:
     temporary = destination.with_name(destination.name + ".part")
-    start = temporary.stat().st_size if temporary.exists() else 0
     last_error: Exception | None = None
 
     for attempt in range(3):
+        start = temporary.stat().st_size if temporary.exists() else 0
         try:
             with request(url, range_start=start or None) as response:
                 partial_response = getattr(response, "status", None) == 206
@@ -99,9 +114,18 @@ def download_with_resume(url: str, destination: Path) -> None:
                     raise IOError(f"download incompleto: {copied} de {expected_total} bytes")
             temporary.replace(destination)
             return
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code == 416 and temporary.exists():
+                # O arquivo parcial pode já estar completo. O chamador sempre
+                # confere o hash forte antes de aceitá-lo.
+                temporary.replace(destination)
+                return
+            if attempt < 2:
+                print(f"    nova tentativa após erro HTTP: {exc}", flush=True)
+                time.sleep(2 ** attempt)
         except (OSError, urllib.error.URLError) as exc:
             last_error = exc
-            start = temporary.stat().st_size if temporary.exists() else 0
             if attempt < 2:
                 print(f"    nova tentativa após erro: {exc}", flush=True)
                 time.sleep(2 ** attempt)
@@ -116,6 +140,26 @@ def digest(path: Path, algorithm: str = "sha512") -> str:
     return checksum.hexdigest()
 
 
+def download_validated(
+    url: str,
+    destination: Path,
+    expected: str,
+    algorithm: str = "sha512",
+) -> str:
+    if destination.exists() and digest(destination, algorithm) == expected:
+        return "já baixado e validado"
+
+    for checksum_attempt in range(2):
+        download_with_resume(url, destination)
+        if digest(destination, algorithm) == expected:
+            return "baixado e validado"
+        destination.unlink(missing_ok=True)
+        destination.with_name(destination.name + ".part").unlink(missing_ok=True)
+        if checksum_attempt == 0:
+            print("    hash divergente; repetindo o download do início", flush=True)
+    raise RuntimeError(f"{algorithm.upper()} divergente após duas tentativas: {destination.name}")
+
+
 def expected_hash(path: Path) -> tuple[str, str]:
     parts = path.read_text(encoding="ascii").strip().split()
     if len(parts) < 2 or not re.fullmatch(r"[0-9a-fA-F]{128}", parts[0]):
@@ -123,17 +167,13 @@ def expected_hash(path: Path) -> tuple[str, str]:
     return parts[0].lower(), Path(parts[-1]).name
 
 
-def crc32_file(path: Path) -> int:
-    value = 0
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
-            value = zlib.crc32(chunk, value)
-    return value & 0xFFFFFFFF
-
-
 def extract_member(archive: ZipFile, member, destination: Path) -> str:
     if destination.exists() and destination.stat().st_size == member.file_size:
-        if crc32_file(destination) == member.CRC:
+        member_digest = hashlib.sha256()
+        with archive.open(member) as source:
+            for chunk in iter(lambda: source.read(8 * 1024 * 1024), b""):
+                member_digest.update(chunk)
+        if digest(destination, "sha256") == member_digest.hexdigest():
             return "já extraído e validado"
 
     temporary = destination.with_name(destination.name + ".part")
@@ -160,16 +200,36 @@ def discover_resources(year: int, turn: int) -> dict[str, dict[str, str]]:
         raise RuntimeError(f"A API do TSE não retornou sucesso para {year}")
 
     pattern = re.compile(rf"^(bweb_{turn}t_([A-Z]{{2}})_\d{{12}}\.zip)(\.sha512)?$")
-    resources: dict[str, dict[str, str]] = {}
+    candidates: dict[tuple[str, str], dict[str, str]] = {}
     for resource in payload["result"].get("resources", []):
         url = resource.get("url", "")
-        filename = Path(urllib.parse.urlparse(url).path).name
+        parsed = urllib.parse.urlparse(url)
+        filename = Path(parsed.path).name
         match = pattern.fullmatch(filename)
         if not match:
             continue
+        if parsed.scheme != "https" or parsed.hostname != "cdn.tse.jus.br":
+            raise RuntimeError(f"URL inesperada no catálogo do TSE: {url}")
         zip_name, uf, hash_suffix = match.groups()
-        item = resources.setdefault(uf, {"zip_name": zip_name})
+        item = candidates.setdefault((uf, zip_name), {"zip_name": zip_name})
         item["hash_url" if hash_suffix else "zip_url"] = url
+
+    resources: dict[str, dict[str, str]] = {}
+    incomplete: list[str] = []
+    by_uf: dict[str, list[dict[str, str]]] = {}
+    for (uf, zip_name), item in candidates.items():
+        if "zip_url" not in item or "hash_url" not in item:
+            incomplete.append(f"{uf}/{zip_name}")
+            continue
+        by_uf.setdefault(uf, []).append(item)
+
+    ambiguous = sorted(uf for uf, items in by_uf.items() if len(items) > 1)
+    if ambiguous:
+        raise RuntimeError(f"Mais de um par ZIP/SHA-512 encontrado para: {', '.join(ambiguous)}")
+    if incomplete:
+        raise RuntimeError(f"Pares ZIP/SHA-512 incompletos: {', '.join(sorted(incomplete))}")
+    for uf, items in by_uf.items():
+        resources[uf] = items[0]
 
     found = set(resources)
     if found != EXPECTED_UFS:
@@ -179,22 +239,126 @@ def discover_resources(year: int, turn: int) -> dict[str, dict[str, str]]:
             f"Publicação incompleta ou inesperada para {year}/{turn}º turno. "
             f"UFs ausentes: {missing}; extras: {extra}."
         )
-    incomplete = [uf for uf, item in resources.items() if "zip_url" not in item or "hash_url" not in item]
-    if incomplete:
-        raise RuntimeError(f"ZIP ou hash ausente para: {', '.join(sorted(incomplete))}")
     return resources
 
 
+def discover_history_resource() -> dict[str, str]:
+    api = RESOURCE_API_URL.format(resource_id=HISTORY_RESOURCE_ID)
+    payload = fetch_json(api)
+    if not payload.get("success"):
+        raise RuntimeError("A API do TSE não retornou sucesso para o histórico da totalização")
+
+    resource = payload.get("result", {})
+    checks = {
+        "id": HISTORY_RESOURCE_ID,
+        "package_id": HISTORY_PACKAGE_ID,
+        "mimetype": "application/zip",
+    }
+    for field, expected in checks.items():
+        if resource.get(field) != expected:
+            raise RuntimeError(
+                f"Metadado inesperado no histórico: {field}={resource.get(field)!r}; "
+                f"esperado={expected!r}"
+            )
+
+    url = resource.get("url", "")
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or parsed.hostname != "cdn.tse.jus.br":
+        raise RuntimeError(f"URL inesperada para o histórico: {url}")
+    if Path(parsed.path).name != HISTORY_ZIP_NAME:
+        raise RuntimeError(f"Nome inesperado para o ZIP do histórico: {url}")
+
+    return {
+        "api_url": api,
+        "resource_page": HISTORY_RESOURCE_PAGE,
+        "resource_id": HISTORY_RESOURCE_ID,
+        "name": resource.get("name", ""),
+        "zip_url": url,
+    }
+
+
+def prepare_history_resource() -> dict[str, object]:
+    resource = discover_history_resource()
+    zip_path = ZIP_DIR / HISTORY_ZIP_NAME
+    print(f"[HISTÓRICO] Preparando {zip_path.name}", flush=True)
+
+    if not zip_path.exists() or digest(zip_path, "sha256") != HISTORY_ZIP_SHA256:
+        print(f"    baixando {resource['zip_url']}", flush=True)
+    zip_status = download_validated(
+        resource["zip_url"], zip_path, HISTORY_ZIP_SHA256, "sha256"
+    )
+
+    actual_zip_hash = digest(zip_path, "sha256")
+    if actual_zip_hash != HISTORY_ZIP_SHA256:
+        raise RuntimeError(
+            f"SHA-256 divergente para {zip_path.name}: "
+            f"esperado {HISTORY_ZIP_SHA256}; obtido {actual_zip_hash}"
+        )
+
+    extracted: list[dict[str, str | int]] = []
+    with ZipFile(zip_path) as archive:
+        members = [member for member in archive.infolist() if not member.is_dir()]
+        names = {Path(member.filename).name for member in members}
+        expected_names = set(HISTORY_MEMBERS_SHA256)
+        if names != expected_names or len(members) != len(expected_names):
+            raise RuntimeError(
+                f"Conteúdo inesperado em {zip_path.name}: "
+                f"esperado {sorted(expected_names)}; obtido {sorted(names)}"
+            )
+
+        for member in members:
+            name = Path(member.filename).name
+            destination = HISTORY_DIR / name
+            status = extract_member(archive, member, destination)
+            actual_member_hash = digest(destination, "sha256")
+            expected_member_hash = HISTORY_MEMBERS_SHA256[name]
+            if actual_member_hash != expected_member_hash:
+                raise RuntimeError(
+                    f"SHA-256 divergente para {name}: "
+                    f"esperado {expected_member_hash}; obtido {actual_member_hash}"
+                )
+            extracted.append(
+                {
+                    "arquivo": name,
+                    "tamanho_bytes": destination.stat().st_size,
+                    "sha256": actual_member_hash,
+                }
+            )
+
+    print(f"    ZIP {zip_status}; CSV/PDF validados por CRC e SHA-256", flush=True)
+    return {
+        **resource,
+        "zip": zip_path.name,
+        "zip_sha256": actual_zip_hash,
+        "tamanho_zip_bytes": zip_path.stat().st_size,
+        "arquivos_extraidos": extracted,
+    }
+
+
+def write_json_atomic(path: Path, payload: dict) -> None:
+    temporary = path.with_name(path.name + ".part")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prepara os arquivos oficiais de boletim de urna.")
+    parser = argparse.ArgumentParser(
+        description="Prepara os BUs e o histórico oficial da totalização."
+    )
     parser.add_argument("--ano", type=int, default=2022)
     parser.add_argument("--turno", type=int, choices=(1, 2), default=2)
     args = parser.parse_args()
+    if args.ano != 2022 or args.turno != 2:
+        parser.error("Este projeto aceita exclusivamente o segundo turno de 2022.")
 
     ZIP_DIR.mkdir(parents=True, exist_ok=True)
     CSV_DIR.mkdir(parents=True, exist_ok=True)
     DOC_DIR.mkdir(parents=True, exist_ok=True)
     AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"Consultando recursos do TSE para {args.ano}, {args.turno}º turno...", flush=True)
     resources = discover_resources(args.ano, args.turno)
@@ -212,11 +376,9 @@ def main() -> None:
         if expected_name != zip_path.name:
             raise RuntimeError(f"O hash de {uf} referencia {expected_name}, não {zip_path.name}")
 
-        zip_status = "já baixado e validado"
         if not zip_path.exists() or digest(zip_path) != expected:
             print(f"    baixando {item['zip_url']}", flush=True)
-            download_with_resume(item["zip_url"], zip_path)
-            zip_status = "baixado"
+        zip_status = download_validated(item["zip_url"], zip_path, expected)
         actual = digest(zip_path)
         if actual != expected:
             raise RuntimeError(f"SHA-512 divergente para {zip_path.name}")
@@ -251,23 +413,27 @@ def main() -> None:
                 "sha512": actual,
                 "tamanho_zip_bytes": zip_path.stat().st_size,
                 "tamanho_csv_bytes": csv_member.file_size,
-                "status_zip": zip_status,
-                "status_csv": csv_status,
             }
         )
 
+    history_manifest = None
+    if args.ano == 2022 and args.turno == 2:
+        history_manifest = prepare_history_resource()
+
     report = {
-        "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
         "ano": args.ano,
         "turno": args.turno,
         "api": API_URL.format(ano=args.ano),
         "quantidade_ufs": len(manifest),
         "recursos": manifest,
+        "historico_totalizacao": history_manifest,
     }
-    (AUDIT_DIR / "manifesto_downloads.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    write_json_atomic(AUDIT_DIR / "manifesto_downloads.json", report)
+    history_message = " e histórico da totalização" if history_manifest else ""
+    print(
+        f"Fontes preparadas: {len(manifest)} ZIPs/CSVs{history_message} validados.",
+        flush=True,
     )
-    print(f"Fontes preparadas: {len(manifest)} ZIPs e CSVs validados.", flush=True)
 
 
 if __name__ == "__main__":

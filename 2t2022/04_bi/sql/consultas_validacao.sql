@@ -24,7 +24,7 @@ FROM fato_boletins
 GROUP BY cd_cargo
 ORDER BY cd_cargo;
 
--- Empates de ordem: cada instante é um lote indivisível na fonte.
+-- Empates temporais: a fonte não informa a ordem interna dentro do mesmo segundo.
 SELECT cd_cargo, dt_bu_recebido, count(*) AS boletins_no_mesmo_segundo
 FROM fato_boletins
 GROUP BY cd_cargo, dt_bu_recebido

@@ -44,7 +44,21 @@ PDFs de leia-me únicos por SHA-256: 1.
 
 - `04_bi/dados/`: fatos e dimensões em Parquet, com dimensões também disponíveis em CSV UTF-8.
 - `04_bi/auditoria/`: reconciliações, hashes das fontes, relatório de validação e alertas de qualidade.
+- `04_bi/auditoria/manifesto_saidas.csv`: tamanho e SHA-256 das saídas publicadas pelo pipeline.
 - `04_bi/GUIA_POWER_BI.md`: relacionamentos e medidas DAX sugeridas.
 - `04_bi/executar_pipeline.sh`: reconstrói e revalida toda a camada sem alterar os dados originais.
 - `04_bi/scripts/prepare_sources.py`: descobre os links na API do TSE, baixa, valida SHA-512 e extrai as fontes.
-- `04_bi/notebooks/analise_evolucao_votos.ipynb`: análise gráfica executada, com uma linha por candidato.
+- `04_bi/notebooks/analise_evolucao_votos.ipynb`: gráficos executados das 5.286 atualizações oficiais, com zoom retangular, variação por atualização e faixas de fundo para 277 blocos observados no gráfico principal.
+- `04_bi/auditoria/blocos_totalizacao.csv`: tabela dos blocos observados com início, fim, duração, seções, votos, composição e efeito percentual.
+
+## Histórico oficial da totalização
+
+`04_bi/fontes/historico_totalizacao/` recebe o CSV agregado e seu leia-me. O script
+`04_bi/scripts/prepare_sources.py` descobre o ZIP pelo identificador do recurso oficial,
+baixa, valida CRC e SHA-256 e extrai os dois arquivos. O notebook usa `DT_TOTALIZACAO` e
+os campos de incremento/acumulado para reproduzir a evolução oficial. Os CSVs de BU
+permanecem separados e são usados para conferir os totais e medir a relação entre
+`DT_BU_RECEBIDO` e `DT_TOTALIZACAO`.
+
+A interpretação resumida está em
+`04_bi/auditoria/SINTESE_CORRELACAO_BU_TOTALIZACAO.md`.

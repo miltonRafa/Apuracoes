@@ -1,8 +1,7 @@
 {
-  "gerado_em_utc": "2026-10-26T19:39:55.736339+00:00",
   "duckdb_versao": "2.0.0",
   "arquivos_origem": 28,
-  "pasta_origem": "/home/administrador/Downloads/Apuracoes/2t2022/02_dados_csv",
-  "pasta_saida": "/home/administrador/Downloads/Apuracoes/2t2022/04_bi/dados",
-  "regra_ordem_apuracao": "DT_BU_RECEBIDO; empates no mesmo segundo formam um único lote"
+  "pasta_origem": "02_dados_csv",
+  "pasta_saida": "04_bi/dados",
+  "regra_ordenacao_recebimento": "DT_BU_RECEBIDO; registros no mesmo segundo não possuem ordenação interna na fonte"
 }

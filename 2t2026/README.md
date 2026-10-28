@@ -32,3 +32,6 @@ Se o TSE estiver publicando os arquivos gradualmente, é possível antecipar som
 ```
 
 Sem essa opção, uma publicação incompleta encerra antes de qualquer download. Se o TSE alterar o identificador do conjunto de dados ou o formato da publicação, ajuste `api_url` em `config.json` antes de executar.
+
+O script valida que `ufs_esperadas` contém exatamente as 28 abrangências; reduzir essa
+lista no arquivo de configuração não permite declarar como completa uma publicação parcial.

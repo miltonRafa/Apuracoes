@@ -13,7 +13,6 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -22,6 +21,10 @@ DEFAULT_CONFIG = PROJECT_ROOT / "config.json"
 DOWNLOAD_DIR = PROJECT_ROOT / "01_origem_zip"
 AUDIT_DIR = PROJECT_ROOT / "auditoria"
 USER_AGENT = "apuracoes-pipeline/1.0 (+https://github.com/miltonRafa/Apuracoes)"
+EXPECTED_UFS = {
+    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
+    "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "ZZ",
+}
 
 
 def request(url: str, *, range_start: int | None = None, timeout: int = 60):
@@ -53,6 +56,11 @@ def load_config(path: Path) -> dict:
     ufs = config["ufs_esperadas"]
     if len(ufs) != len(set(ufs)) or any(not re.fullmatch(r"[A-Z]{2}", uf) for uf in ufs):
         raise RuntimeError("ufs_esperadas contém siglas inválidas ou repetidas.")
+    if set(ufs) != EXPECTED_UFS:
+        raise RuntimeError(
+            "ufs_esperadas deve conter exatamente as 27 UFs e Exterior (ZZ). "
+            f"Ausentes: {sorted(EXPECTED_UFS - set(ufs))}; extras: {sorted(set(ufs) - EXPECTED_UFS)}."
+        )
     return config
 
 
@@ -159,10 +167,13 @@ def discover_resources(payload: dict, turn: int) -> tuple[dict[str, dict[str, st
     candidates: dict[tuple[str, str], dict[str, str]] = {}
     for resource in payload["result"].get("resources", []):
         url = resource.get("url", "")
-        filename = Path(urllib.parse.urlparse(url).path).name
+        parsed = urllib.parse.urlparse(url)
+        filename = Path(parsed.path).name
         match = pattern.fullmatch(filename)
         if not match:
             continue
+        if parsed.scheme != "https" or parsed.hostname != "cdn.tse.jus.br":
+            raise RuntimeError(f"URL inesperada no catálogo do TSE: {url}")
         zip_name, uf, hash_suffix = match.groups()
         item = candidates.setdefault((uf, zip_name), {"zip_name": zip_name})
         item["hash_url" if hash_suffix else "zip_url"] = url
@@ -267,13 +278,11 @@ def main() -> None:
                 "hash_url": item["hash_url"],
                 "sha512": expected_hash,
                 "tamanho_bytes": zip_path.stat().st_size,
-                "status": status,
             }
         )
 
     complete = not missing_ufs and not incomplete_pairs
     report = {
-        "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
         "status": "COMPLETO" if complete else "PARCIAL",
         "ano": config["ano"],
         "turno": config["turno"],

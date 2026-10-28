@@ -8,8 +8,8 @@ import csv
 import hashlib
 import json
 import os
+import re
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 
 import duckdb
@@ -20,6 +20,10 @@ BI_ROOT = ROOT / "04_bi"
 SOURCE_DIR = ROOT / "02_dados_csv"
 OUTPUT_DIR = BI_ROOT / "dados"
 AUDIT_DIR = BI_ROOT / "auditoria"
+EXPECTED_UFS = {
+    "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
+    "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "ZZ",
+}
 
 
 def sql_path(path: Path) -> str:
@@ -57,6 +61,12 @@ def copy_csv(con: duckdb.DuckDBPyConnection, query: str, destination: Path) -> N
     )
 
 
+def write_text_atomic(destination: Path, content: str) -> None:
+    temporary = destination.with_name(destination.name + ".part")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(destination)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Gera a camada Parquet para BI.")
     parser.add_argument("--threads", type=int, default=max(1, min(4, os.cpu_count() or 1)))
@@ -65,6 +75,18 @@ def main() -> None:
     sources = sorted(SOURCE_DIR.glob("bweb_2t_*.csv"))
     if len(sources) != 28:
         raise SystemExit(f"Esperados 28 CSVs em {SOURCE_DIR}; encontrados {len(sources)}.")
+    source_ufs: set[str] = set()
+    for source in sources:
+        match = re.fullmatch(r"bweb_2t_([A-Z]{2})_\d{12}\.csv", source.name)
+        if not match:
+            raise SystemExit(f"Nome de fonte inesperado: {source.name}")
+        source_ufs.add(match.group(1))
+    if source_ufs != EXPECTED_UFS:
+        raise SystemExit(
+            "Conjunto de abrangências inválido. "
+            f"Ausentes: {sorted(EXPECTED_UFS - source_ufs)}; "
+            f"extras: {sorted(source_ufs - EXPECTED_UFS)}."
+        )
 
     BI_ROOT.mkdir(exist_ok=True)
     AUDIT_DIR.mkdir(exist_ok=True)
@@ -182,8 +204,8 @@ def main() -> None:
             SELECT
                 *,
                 cast(strftime(dt_bu_recebido, '%Y%m%d%H%M%S') AS BIGINT) AS id_tempo_recebimento,
-                dense_rank() OVER (PARTITION BY cd_cargo ORDER BY dt_bu_recebido) AS nr_lote_nacional,
-                dense_rank() OVER (PARTITION BY cd_cargo, sg_uf ORDER BY dt_bu_recebido) AS nr_lote_uf,
+                dense_rank() OVER (PARTITION BY cd_cargo ORDER BY dt_bu_recebido) AS nr_instante_nacional,
+                dense_rank() OVER (PARTITION BY cd_cargo, sg_uf ORDER BY dt_bu_recebido) AS nr_instante_uf,
                 count(*) OVER (PARTITION BY cd_cargo, dt_bu_recebido) AS qt_bu_mesmo_instante_nacional,
                 count(*) OVER (PARTITION BY cd_cargo, sg_uf, dt_bu_recebido) AS qt_bu_mesmo_instante_uf,
                 datediff('second', min(dt_bu_recebido) OVER (PARTITION BY cd_cargo), dt_bu_recebido) AS segundos_desde_inicio_cargo
@@ -260,42 +282,56 @@ def main() -> None:
             copy_parquet(con, query, staging / "dimensoes" / f"{name}.parquet")
             copy_csv(con, query, staging / "dimensoes_csv" / f"{name}.csv")
 
-        lote_query = """
+        recebimento_query = """
             SELECT
                 id_tempo_recebimento, dt_bu_recebido, sg_uf, cd_cargo,
-                min(nr_lote_nacional) AS nr_lote_nacional,
-                min(nr_lote_uf) AS nr_lote_uf,
-                count(*) AS qt_boletins_lote,
-                sum(qt_aptos) AS qt_aptos_lote,
-                sum(qt_comparecimento) AS qt_comparecimento_lote,
-                sum(qt_abstencoes) AS qt_abstencoes_lote,
+                min(nr_instante_nacional) AS nr_instante_nacional,
+                min(nr_instante_uf) AS nr_instante_uf,
+                count(*) AS qt_boletins_recebidos,
+                sum(qt_aptos) AS qt_aptos_recebidos,
+                sum(qt_comparecimento) AS qt_comparecimento_recebido,
+                sum(qt_abstencoes) AS qt_abstencoes_recebidas,
                 sg_uf AS particao_uf
             FROM boletins
             GROUP BY id_tempo_recebimento, dt_bu_recebido, sg_uf, cd_cargo
         """
-        copy_parquet(con, lote_query, staging / "fato_lotes_recebimento", partitioned=True)
+        copy_parquet(con, recebimento_query, staging / "fato_recebimentos", partitioned=True)
 
+        previous = BI_ROOT / f".dados_anterior_{os.getpid()}"
+        if previous.exists():
+            shutil.rmtree(previous)
         if OUTPUT_DIR.exists():
-            shutil.rmtree(OUTPUT_DIR)
-        staging.rename(OUTPUT_DIR)
+            OUTPUT_DIR.rename(previous)
+        try:
+            staging.rename(OUTPUT_DIR)
+        except Exception:
+            if previous.exists() and not OUTPUT_DIR.exists():
+                previous.rename(OUTPUT_DIR)
+            raise
+        if previous.exists():
+            shutil.rmtree(previous)
 
         manifest_path = AUDIT_DIR / "manifesto_fontes.csv"
-        with manifest_path.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.writer(stream, delimiter=";")
+        manifest_temporary = manifest_path.with_name(manifest_path.name + ".part")
+        with manifest_temporary.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.writer(stream, delimiter=";", lineterminator="\n")
             writer.writerow(["arquivo", "tamanho_bytes", "sha256"])
             for source in sources:
                 writer.writerow([source.name, source.stat().st_size, sha256(source)])
+        manifest_temporary.replace(manifest_path)
 
         metadata = {
-            "gerado_em_utc": datetime.now(timezone.utc).isoformat(),
             "duckdb_versao": duckdb.__version__,
             "arquivos_origem": len(sources),
-            "pasta_origem": str(SOURCE_DIR),
-            "pasta_saida": str(OUTPUT_DIR),
-            "regra_ordem_apuracao": "DT_BU_RECEBIDO; empates no mesmo segundo formam um único lote",
+            "pasta_origem": "02_dados_csv",
+            "pasta_saida": "04_bi/dados",
+            "regra_ordenacao_recebimento": (
+                "DT_BU_RECEBIDO; registros no mesmo segundo não possuem ordenação interna na fonte"
+            ),
         }
-        (AUDIT_DIR / "metadados_execucao.json").write_text(
-            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        write_text_atomic(
+            AUDIT_DIR / "metadados_execucao.json",
+            json.dumps(metadata, ensure_ascii=False, indent=2) + "\n",
         )
         print(f"Camada BI gerada em {OUTPUT_DIR}")
     except Exception:

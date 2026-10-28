@@ -13,6 +13,10 @@
 # Camada analítica gerada pelo pipeline
 **/04_bi/dados/
 
+# Fonte complementar reproduzível pelo pipeline
+**/04_bi/fontes/historico_totalizacao/*.csv
+**/04_bi/fontes/historico_totalizacao/*.pdf
+
 # Arquivos temporários do sistema e editores
 .DS_Store
 Thumbs.db

@@ -65,7 +65,8 @@ def main() -> None:
     else:
         uf_filter = "AND v.sg_uf = ?" if args.uf else ""
         query = f"""
-            SELECT v.dt_bu_recebido, v.sg_uf, d.nm_votavel, sum(v.qt_votos) AS votos_no_lote
+            SELECT v.dt_bu_recebido, v.sg_uf, d.nm_votavel,
+                   sum(v.qt_votos) AS votos_recebidos_no_segundo
             FROM votos v JOIN votaveis d USING (id_votavel)
             WHERE v.cd_cargo = ? {uf_filter}
             GROUP BY v.dt_bu_recebido, v.sg_uf, d.nm_votavel

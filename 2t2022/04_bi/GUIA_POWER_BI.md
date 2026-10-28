@@ -6,7 +6,7 @@ Use o conector **Pasta** para cada fato e combine os arquivos Parquet:
 
 - `dados/fato_votos/`: um registro por seção, cargo e opção votável;
 - `dados/fato_boletins/`: um registro por seção e cargo;
-- `dados/fato_lotes_recebimento/`: quantidade de boletins e eleitores recebidos por segundo, UF e cargo.
+- `dados/fato_recebimentos/`: quantidade de boletins e eleitores recebidos por segundo, UF e cargo.
 
 As dimensões estão em `dados/dimensoes/` (Parquet) e também em `dados/dimensoes_csv/` (CSV UTF-8).
 
@@ -56,7 +56,16 @@ RETURN
     )
 ```
 
-Use `dt_bu_recebido` como eixo da apuração. Boletins com o mesmo segundo são um único lote: não existe informação na fonte que permita criar uma ordem interna confiável.
+As medidas acima analisam o **recebimento dos BUs**. Nesse contexto, use
+`dt_bu_recebido` como eixo. Boletins com o mesmo segundo podem ser agregados para análise,
+mas isso não demonstra que formem um lote interno indivisível; a fonte também não permite
+ordená-los entre si.
+
+Para reproduzir a **evolução oficial da totalização presidencial nacional**, use
+`fontes/historico_totalizacao/Historico_Totalizacao_Presidente_BR_2T_2022.csv` e
+`DT_TOTALIZACAO`, como faz `notebooks/analise_evolucao_votos.ipynb`. Não trate
+`DT_BU_RECEBIDO` e `DT_TOTALIZACAO` como o mesmo evento: o primeiro registra o recebimento
+do boletim e o segundo, a publicação da atualização na totalização oficial.
 
 Antes de publicar um painel, confira `auditoria/RELATORIO_VALIDACAO.md`. Os registros de `alertas_temporais.csv` não foram corrigidos artificialmente: a ordem continua baseada no recebimento informado pela fonte.
 

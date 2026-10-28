@@ -1,17 +1,28 @@
 teste;severidade;status;obtido;esperado;detalhe
+Quantidade de arquivos de origem;ERRO;OK;28;28;Um CSV por UF/Exterior
+Abrangências da origem;ERRO;OK;0;0;Conjunto exato das 27 UFs e Exterior
+UF coerente com o nome do arquivo;ERRO;OK;0;0;SG_UF versus arquivo fonte
+Escopo eleitoral da origem;ERRO;OK;0;0;Presidente e Governador, segundo turno de 2022
+Conversão dos campos numéricos obrigatórios;ERRO;OK;0;0;Nenhum valor vira NULL no parse
+Conversão das datas obrigatórias;ERRO;OK;0;0;Datas necessárias ao modelo são válidas
+Conversão dos campos numéricos opcionais preenchidos;ERRO;OK;0;0;Valores preenchidos não podem virar NULL no parse
+Conversão das datas opcionais preenchidas;ERRO;OK;0;0;Datas preenchidas não podem virar NULL no parse
 Quantidade de registros de votos;ERRO;OK;2841231;2841231;Origem versus fato_votos
 Total de votos;ERRO;OK;190368252;190368252;Reconciliação integral da medida QT_VOTOS
 Quantidade de boletins por seção/cargo;ERRO;OK;721068;721068;Origem agregada versus fato_boletins
-Chaves duplicadas em fato_votos;ERRO;OK;0;0;A chave inclui seção, cargo, tipo e número do votável
+Chaves duplicadas em fato_votos;ERRO;OK;0;0;Seção, cargo, tipo e número do votável
 Chaves duplicadas em fato_boletins;ERRO;OK;0;0;Uma linha por seção e cargo
-Consistência interna dos metadados do BU;ERRO;OK;0;0;Linhas de voto do mesmo BU devem repetir os mesmos metadados
+Consistência interna de todos os metadados do BU;ERRO;OK;0;0;Campos repetidos não podem variar dentro do BU
+Campos obrigatórios em fato_boletins;ERRO;OK;0;0;Parse e agregação não podem gerar NULL
+Horário de emissão ausente;ALERTA;ALERTA;1;0;"Ausência preservada da fonte; não é erro de conversão"
+Campos obrigatórios em fato_votos;ERRO;OK;0;0;Votos não nulos e não negativos
 Equação do eleitorado;ERRO;OK;0;0;QT_APTOS = QT_COMPARECIMENTO + QT_ABSTENCOES
 Fechamento de votos por boletim;ERRO;OK;0;0;Soma de QT_VOTOS = QT_COMPARECIMENTO
-Horários de recebimento válidos;ERRO;OK;0;0;Necessário para ordenar a apuração
 Impressão digital dos registros;ERRO;OK;15038630024383966764;15038630024383966764;Hash independente de ordem
-Chaves duplicadas em fato_lotes_recebimento;ERRO;OK;0;0;Uma linha por segundo, UF e cargo
-Reconciliação de boletins nos lotes;ERRO;OK;721068;721068;Soma dos lotes versus fato_boletins
-Reconciliação de comparecimento nos lotes;ERRO;OK;190368252.0;190368252;Soma dos lotes versus fato_boletins
+Chaves duplicadas em fato_recebimentos;ERRO;OK;0;0;Uma linha por segundo, UF e cargo
+Reconciliação de boletins recebidos;ERRO;OK;721068;721068;Agregado por instante versus fato_boletins
+Reconciliação do comparecimento recebido;ERRO;OK;190368252.0;190368252;Agregado por instante versus fato_boletins
+Consistência dos atributos das dimensões;ERRO;OK;0;0;ANY_VALUE só é usado quando há uma única variante
 Unicidade da dimensão localidade;ERRO;OK;0;0;Chave: id_localidade
 Integridade referencial da dimensão localidade;ERRO;OK;0;0;Fato: boletins_bi
 Unicidade da dimensão cargo;ERRO;OK;0;0;Chave: cd_cargo
@@ -21,9 +32,9 @@ Integridade referencial da dimensão votável;ERRO;OK;0;0;Fato: votos_bi
 Unicidade da dimensão tempo;ERRO;OK;0;0;Chave: id_tempo_recebimento
 Integridade referencial da dimensão tempo;ERRO;OK;0;0;Fato: boletins_bi
 Integridade referencial da dimensão UF;ERRO;OK;0;0;Todas as siglas possuem nome e região
-Partições publicadas em fato_votos;ERRO;OK;28;28;Uma partição Parquet por UF/Exterior
-Partições publicadas em fato_boletins;ERRO;OK;28;28;Uma partição Parquet por UF/Exterior
-Partições publicadas em fato_lotes_recebimento;ERRO;OK;28;28;Uma partição Parquet por UF/Exterior
-Reconciliação por UF;ERRO;OK;0;0;Linhas e votos conferidos para as 28 UFs/Exterior
-Recebimento anterior à emissão;ALERTA;ALERTA;600;0;"Anomalia da fonte; casos completos em alertas_temporais.csv"
-Emissão anterior ao encerramento;ALERTA;ALERTA;1;0;"Anomalia da fonte; casos completos em alertas_temporais.csv"
+Partições lógicas em fato_votos;ERRO;OK;28;28;Uma abrangência lógica por UF/Exterior
+Partições lógicas em fato_boletins;ERRO;OK;28;28;Uma abrangência lógica por UF/Exterior
+Partições lógicas em fato_recebimentos;ERRO;OK;28;28;Uma abrangência lógica por UF/Exterior
+Reconciliação por UF;ERRO;OK;0;0;Linhas e votos conferidos para as 28 abrangências
+Recebimento anterior à emissão;ALERTA;ALERTA;600;0;"Anomalia da fonte; casos em alertas_temporais.csv"
+Emissão anterior ao encerramento;ALERTA;ALERTA;1;0;"Anomalia da fonte; casos em alertas_temporais.csv"

@@ -1,9 +1,72 @@
 {
-  "executado_em_utc": "2026-10-26T19:40:21.739127+00:00",
   "status_geral": "APROVADO_COM_ALERTAS",
   "falhas": 0,
-  "alertas": 2,
+  "alertas": 3,
   "testes": [
+    {
+      "teste": "Quantidade de arquivos de origem",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 28,
+      "esperado": 28,
+      "detalhe": "Um CSV por UF/Exterior"
+    },
+    {
+      "teste": "Abrangências da origem",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Conjunto exato das 27 UFs e Exterior"
+    },
+    {
+      "teste": "UF coerente com o nome do arquivo",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "SG_UF versus arquivo fonte"
+    },
+    {
+      "teste": "Escopo eleitoral da origem",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Presidente e Governador, segundo turno de 2022"
+    },
+    {
+      "teste": "Conversão dos campos numéricos obrigatórios",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Nenhum valor vira NULL no parse"
+    },
+    {
+      "teste": "Conversão das datas obrigatórias",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Datas necessárias ao modelo são válidas"
+    },
+    {
+      "teste": "Conversão dos campos numéricos opcionais preenchidos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Valores preenchidos não podem virar NULL no parse"
+    },
+    {
+      "teste": "Conversão das datas opcionais preenchidas",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Datas preenchidas não podem virar NULL no parse"
+    },
     {
       "teste": "Quantidade de registros de votos",
       "severidade": "ERRO",
@@ -34,7 +97,7 @@
       "status": "OK",
       "obtido": 0,
       "esperado": 0,
-      "detalhe": "A chave inclui seção, cargo, tipo e número do votável"
+      "detalhe": "Seção, cargo, tipo e número do votável"
     },
     {
       "teste": "Chaves duplicadas em fato_boletins",
@@ -45,12 +108,36 @@
       "detalhe": "Uma linha por seção e cargo"
     },
     {
-      "teste": "Consistência interna dos metadados do BU",
+      "teste": "Consistência interna de todos os metadados do BU",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 0,
       "esperado": 0,
-      "detalhe": "Linhas de voto do mesmo BU devem repetir os mesmos metadados"
+      "detalhe": "Campos repetidos não podem variar dentro do BU"
+    },
+    {
+      "teste": "Campos obrigatórios em fato_boletins",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Parse e agregação não podem gerar NULL"
+    },
+    {
+      "teste": "Horário de emissão ausente",
+      "severidade": "ALERTA",
+      "status": "ALERTA",
+      "obtido": 1,
+      "esperado": 0,
+      "detalhe": "Ausência preservada da fonte; não é erro de conversão"
+    },
+    {
+      "teste": "Campos obrigatórios em fato_votos",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "Votos não nulos e não negativos"
     },
     {
       "teste": "Equação do eleitorado",
@@ -69,14 +156,6 @@
       "detalhe": "Soma de QT_VOTOS = QT_COMPARECIMENTO"
     },
     {
-      "teste": "Horários de recebimento válidos",
-      "severidade": "ERRO",
-      "status": "OK",
-      "obtido": 0,
-      "esperado": 0,
-      "detalhe": "Necessário para ordenar a apuração"
-    },
-    {
       "teste": "Impressão digital dos registros",
       "severidade": "ERRO",
       "status": "OK",
@@ -85,7 +164,7 @@
       "detalhe": "Hash independente de ordem"
     },
     {
-      "teste": "Chaves duplicadas em fato_lotes_recebimento",
+      "teste": "Chaves duplicadas em fato_recebimentos",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 0,
@@ -93,20 +172,28 @@
       "detalhe": "Uma linha por segundo, UF e cargo"
     },
     {
-      "teste": "Reconciliação de boletins nos lotes",
+      "teste": "Reconciliação de boletins recebidos",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 721068,
       "esperado": 721068,
-      "detalhe": "Soma dos lotes versus fato_boletins"
+      "detalhe": "Agregado por instante versus fato_boletins"
     },
     {
-      "teste": "Reconciliação de comparecimento nos lotes",
+      "teste": "Reconciliação do comparecimento recebido",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 190368252.0,
       "esperado": 190368252,
-      "detalhe": "Soma dos lotes versus fato_boletins"
+      "detalhe": "Agregado por instante versus fato_boletins"
+    },
+    {
+      "teste": "Consistência dos atributos das dimensões",
+      "severidade": "ERRO",
+      "status": "OK",
+      "obtido": 0,
+      "esperado": 0,
+      "detalhe": "ANY_VALUE só é usado quando há uma única variante"
     },
     {
       "teste": "Unicidade da dimensão localidade",
@@ -181,28 +268,28 @@
       "detalhe": "Todas as siglas possuem nome e região"
     },
     {
-      "teste": "Partições publicadas em fato_votos",
+      "teste": "Partições lógicas em fato_votos",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 28,
       "esperado": 28,
-      "detalhe": "Uma partição Parquet por UF/Exterior"
+      "detalhe": "Uma abrangência lógica por UF/Exterior"
     },
     {
-      "teste": "Partições publicadas em fato_boletins",
+      "teste": "Partições lógicas em fato_boletins",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 28,
       "esperado": 28,
-      "detalhe": "Uma partição Parquet por UF/Exterior"
+      "detalhe": "Uma abrangência lógica por UF/Exterior"
     },
     {
-      "teste": "Partições publicadas em fato_lotes_recebimento",
+      "teste": "Partições lógicas em fato_recebimentos",
       "severidade": "ERRO",
       "status": "OK",
       "obtido": 28,
       "esperado": 28,
-      "detalhe": "Uma partição Parquet por UF/Exterior"
+      "detalhe": "Uma abrangência lógica por UF/Exterior"
     },
     {
       "teste": "Reconciliação por UF",
@@ -210,7 +297,7 @@
       "status": "OK",
       "obtido": 0,
       "esperado": 0,
-      "detalhe": "Linhas e votos conferidos para as 28 UFs/Exterior"
+      "detalhe": "Linhas e votos conferidos para as 28 abrangências"
     },
     {
       "teste": "Recebimento anterior à emissão",
@@ -218,7 +305,7 @@
       "status": "ALERTA",
       "obtido": 600,
       "esperado": 0,
-      "detalhe": "Anomalia da fonte; casos completos em alertas_temporais.csv"
+      "detalhe": "Anomalia da fonte; casos em alertas_temporais.csv"
     },
     {
       "teste": "Emissão anterior ao encerramento",
@@ -226,7 +313,7 @@
       "status": "ALERTA",
       "obtido": 1,
       "esperado": 0,
-      "detalhe": "Anomalia da fonte; casos completos em alertas_temporais.csv"
+      "detalhe": "Anomalia da fonte; casos em alertas_temporais.csv"
     }
   ]
 }
