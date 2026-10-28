@@ -2,6 +2,9 @@
 
 Esta pasta transforma os CSVs oficiais em um modelo próprio para BI, sem alterar `01_origem_zip/` nem `02_dados_csv/`.
 
+A visão executiva, o diagrama da arquitetura e os resultados consolidados dos testes estão
+no [README principal](../../README.md).
+
 ## O que esta análise responde
 
 O projeto separa dois momentos:
