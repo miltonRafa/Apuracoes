@@ -39,6 +39,12 @@ HISTORY_MEMBERS_SHA256 = {
     ),
     "leiame.pdf": "453cf754ad71b7bd9bcd31303fd14aefdecb7d091388ba585706ebd3c03d763f",
 }
+DETAIL_SECTION_ZIP_NAME = "detalhe_votacao_secao_2022.zip"
+DETAIL_SECTION_URL = "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_secao/detalhe_votacao_secao_2022.zip"
+DETAIL_SECTION_ZIP_SHA256 = "ad22c50b9e6d9dfb096a2170680a190f1734895ba89d8977b95fd63ca02c03da"
+DETAIL_SECTION_MEMBER = "detalhe_votacao_secao_2022_BR.csv"
+DETAIL_SECTION_MEMBER_SHA256 = "611843dc968ac4a5c0b72f97b8799f88c678fd9f654829ad0c524477f7c24b5e"
+DETAIL_SECTION_DIR = DATA_ROOT / "04_bi" / "fontes" / "detalhe_votacao_secao"
 EXPECTED_UFS = {
     "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA",
     "PB", "PE", "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO", "ZZ",
@@ -335,6 +341,24 @@ def prepare_history_resource() -> dict[str, object]:
     }
 
 
+def prepare_detail_section_resource() -> dict[str, object]:
+    """Preserva o detalhe presidencial por seção, inclusive seu relógio de totalização."""
+    zip_path = ZIP_DIR / DETAIL_SECTION_ZIP_NAME
+    DETAIL_SECTION_DIR.mkdir(parents=True, exist_ok=True)
+    status = download_validated(DETAIL_SECTION_URL, zip_path, DETAIL_SECTION_ZIP_SHA256, "sha256")
+    with ZipFile(zip_path) as archive:
+        bad = archive.testzip()
+        if bad:
+            raise RuntimeError(f"CRC inválido no detalhe por seção: {bad}")
+        member = archive.getinfo(DETAIL_SECTION_MEMBER)
+        destination = DETAIL_SECTION_DIR / DETAIL_SECTION_MEMBER
+        extract_member(archive, member, destination)
+    actual = digest(destination, "sha256")
+    if actual != DETAIL_SECTION_MEMBER_SHA256:
+        raise RuntimeError(f"SHA-256 divergente para {DETAIL_SECTION_MEMBER}")
+    return {"zip": zip_path.name, "zip_url": DETAIL_SECTION_URL, "zip_sha256": DETAIL_SECTION_ZIP_SHA256, "arquivo": DETAIL_SECTION_MEMBER, "arquivo_sha256": actual, "tamanho_bytes": destination.stat().st_size, "status_zip": status}
+
+
 def write_json_atomic(path: Path, payload: dict) -> None:
     temporary = path.with_name(path.name + ".part")
     temporary.write_text(
@@ -417,8 +441,10 @@ def main() -> None:
         )
 
     history_manifest = None
+    detail_section_manifest = None
     if args.ano == 2022 and args.turno == 2:
         history_manifest = prepare_history_resource()
+        detail_section_manifest = prepare_detail_section_resource()
 
     report = {
         "ano": args.ano,
@@ -427,6 +453,7 @@ def main() -> None:
         "quantidade_ufs": len(manifest),
         "recursos": manifest,
         "historico_totalizacao": history_manifest,
+        "detalhe_apuracao_secao": detail_section_manifest,
     }
     write_json_atomic(AUDIT_DIR / "manifesto_downloads.json", report)
     history_message = " e histórico da totalização" if history_manifest else ""

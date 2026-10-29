@@ -16,6 +16,7 @@
 # Fonte complementar reproduzível pelo pipeline
 **/04_bi/fontes/historico_totalizacao/*.csv
 **/04_bi/fontes/historico_totalizacao/*.pdf
+**/04_bi/fontes/detalhe_votacao_secao/*.csv
 
 # Arquivos temporários do sistema e editores
 .DS_Store

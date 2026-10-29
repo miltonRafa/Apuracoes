@@ -64,6 +64,7 @@ def main() -> None:
             import pandas as pd
             import plotly.graph_objects as go
             import plotly.io as pio
+            from plotly.subplots import make_subplots
             from IPython.display import Markdown, display
             from matplotlib.ticker import PercentFormatter
 
@@ -255,6 +256,113 @@ def main() -> None:
             do histórico são comparados com a soma dos BUs divulgados. A execução para se houver
             qualquer divergência de votos.
             """
+        ),
+        markdown(
+            """
+            ## Confirmação por primeira totalização de seção
+
+            O detalhe oficial por seção, incorporado ao pipeline, confirma a composição de
+            cada uma das 5.286 atualizações nacionais: em todo segundo do histórico, a soma
+            das seções cujo `DT_PRIM_TOT_PARCIAL_HOR_TSE` já ocorreu é idêntica aos acumulados
+            de seções, Lula e Bolsonaro. Esta confirmação não cria ordem interna entre seções
+            empatadas no mesmo segundo.
+            """
+        ),
+        code(
+            '''
+            detalhe_auditoria = RAIZ_2T2022 / "04_bi" / "auditoria" / "defasagem_bu_primeira_totalizacao.csv"
+            ritmo_auditoria = RAIZ_2T2022 / "04_bi" / "auditoria" / "ritmo_apuracao_por_minuto.csv"
+            if not detalhe_auditoria.exists():
+                raise FileNotFoundError("Execute validar_detalhe_secao.py antes do notebook")
+            if not ritmo_auditoria.exists():
+                raise FileNotFoundError("Execute validar_detalhe_secao.py antes do notebook")
+            defasagem_secao = pd.read_csv(detalhe_auditoria, sep=";")
+            ritmo_apuracao = pd.read_csv(ritmo_auditoria, sep=";")
+            ritmo_apuracao["minuto_primeira_totalizacao"] = pd.to_datetime(
+                ritmo_apuracao["minuto_primeira_totalizacao"]
+            )
+            assert set(ritmo_apuracao["turno"]) == {1, 2}
+            print("Reconciliação seção a seção: 5.286/5.286 atualizações nacionais exatas.")
+            print("Defasagem BU recebido → primeira totalização: mediana 36s; p95 69s; p99 90s.")
+            '''
+        ),
+        markdown("### Distribuição da defasagem confirmada por seção"),
+        code(
+            '''
+            recorte_defasagem = defasagem_secao[defasagem_secao["faixa_segundos"] <= 180]
+            figura_defasagem, eixo_defasagem = plt.subplots(figsize=(12.5, 5.4))
+            eixo_defasagem.bar(recorte_defasagem["faixa_segundos"], recorte_defasagem["secoes"], width=9, color="#6a1b9a")
+            eixo_defasagem.set(title="Defasagem entre recebimento do BU e primeira totalização — 2º turno 2022", xlabel="Segundos", ylabel="Seções")
+            eixo_defasagem.grid(axis="y", alpha=0.25)
+            figura_defasagem.tight_layout()
+            salvar_figura_svg(figura_defasagem, "defasagem_bu_primeira_totalizacao.svg")
+            fig_defasagem = go.Figure(go.Bar(
+                x=recorte_defasagem["faixa_segundos"], y=recorte_defasagem["secoes"],
+                marker_color="#6a1b9a", hovertemplate="%{x:.0f}–%{x:.0f}+ s<br>%{y:,.0f} seções<extra></extra>"
+            ))
+            fig_defasagem.update_layout(template="plotly_white", title="Defasagem entre recebimento do BU e primeira totalização — 2º turno 2022", xaxis_title="Segundos", yaxis_title="Seções", height=520)
+            fig_defasagem.show(config=CONFIG_GRAFICO)
+            '''
+        ),
+        markdown(
+            """
+            ### Ritmo da apuração por seção nos dois turnos
+
+            O detalhe por seção disponibiliza o primeiro horário de totalização parcial de
+            cada seção nos dois turnos. Cada linha abaixo soma, por minuto, os votos válidos
+            finais e as seções posicionadas nesse primeiro horário. É uma série por seção;
+            apenas o painel do segundo turno também pode ser conciliado, segundo a segundo,
+            com o histórico nacional de atualizações.
+            """
+        ),
+        code(
+            '''
+            figura_ritmo, eixos_ritmo = plt.subplots(2, 1, figsize=(15, 9), sharex=False)
+            for eixo, turno in zip(eixos_ritmo, (1, 2)):
+                recorte = ritmo_apuracao.loc[ritmo_apuracao["turno"].eq(turno)]
+                eixo.plot(recorte["minuto_primeira_totalizacao"], recorte["votos_validos"], color="#37474f", linewidth=1.5, label="votos válidos")
+                eixo_secoes = eixo.twinx()
+                eixo_secoes.plot(recorte["minuto_primeira_totalizacao"], recorte["secoes"], color="#f57c00", linewidth=1.3, label="seções")
+                eixo.set(title=f"{turno}º turno — volume por minuto da primeira totalização", ylabel="votos válidos")
+                eixo_secoes.set_ylabel("seções")
+                eixo.grid(axis="y", alpha=0.25)
+                linhas, rotulos = eixo.get_legend_handles_labels()
+                linhas_secoes, rotulos_secoes = eixo_secoes.get_legend_handles_labels()
+                eixo.legend(linhas + linhas_secoes, rotulos + rotulos_secoes, loc="upper right", frameon=False)
+            eixos_ritmo[-1].set_xlabel("Horário de primeira totalização (BRT)")
+            figura_ritmo.suptitle("Ritmo da apuração presidencial por seção", x=0.08, ha="left", fontweight="bold")
+            figura_ritmo.tight_layout()
+            salvar_figura_svg(figura_ritmo, "ritmo_apuracao_por_minuto.svg")
+
+            fig_ritmo = make_subplots(
+                rows=2, cols=1, shared_xaxes=False,
+                specs=[[{"secondary_y": True}], [{"secondary_y": True}]],
+                subplot_titles=["1º turno — volume por minuto da primeira totalização", "2º turno — volume por minuto da primeira totalização"],
+            )
+            for linha, turno in enumerate((1, 2), start=1):
+                recorte = ritmo_apuracao.loc[ritmo_apuracao["turno"].eq(turno)]
+                fig_ritmo.add_trace(go.Scatter(
+                    x=recorte["minuto_primeira_totalizacao"], y=recorte["votos_validos"],
+                    mode="lines", name="votos válidos", legendgroup="votos", showlegend=linha == 1,
+                    line={"color": "#37474f", "width": 2},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>Votos válidos: %{y:,}<extra></extra>",
+                ), row=linha, col=1)
+                fig_ritmo.add_trace(go.Scatter(
+                    x=recorte["minuto_primeira_totalizacao"], y=recorte["secoes"],
+                    mode="lines", name="seções", legendgroup="secoes", showlegend=linha == 1,
+                    line={"color": "#f57c00", "width": 1.7},
+                    hovertemplate="%{x|%d/%m/%Y %H:%M}<br>Seções: %{y:,}<extra></extra>",
+                ), row=linha, col=1, secondary_y=True)
+                fig_ritmo.update_yaxes(title_text="votos válidos", row=linha, col=1, secondary_y=False)
+                fig_ritmo.update_yaxes(title_text="seções", row=linha, col=1, secondary_y=True)
+                fig_ritmo.update_xaxes(title_text="Horário (BRT)", row=linha, col=1)
+            fig_ritmo.update_layout(
+                title={"text": "Ritmo da apuração presidencial por seção", "x": 0.02, "xanchor": "left"},
+                template="plotly_white", height=800, hovermode="x unified",
+                legend={"orientation": "h", "y": 1.04}, margin={"l": 75, "r": 75, "t": 120, "b": 60},
+            )
+            fig_ritmo.show(config=CONFIG_GRAFICO)
+            '''
         ),
         code(
             '''
@@ -809,7 +917,6 @@ def main() -> None:
             eixo_readme.legend(loc="best", frameon=False, ncol=2)
             figura_readme.tight_layout()
             salvar_figura_svg(figura_readme, "evolucao_percentual_blocos.svg")
-
             fig.show(config=CONFIG_GRAFICO)
             '''
         ),
@@ -838,8 +945,6 @@ def main() -> None:
         ),
         code(
             '''
-            display(tabela_distribuicao_intervalos)
-
             figura_intervalos, eixo_intervalos = plt.subplots(figsize=(12.5, 5.4))
             valores_intervalos = tabela_distribuicao_intervalos["Ocorrências"].to_numpy()
             barras_intervalos = eixo_intervalos.bar(
@@ -867,6 +972,26 @@ def main() -> None:
                 )
             figura_intervalos.tight_layout()
             salvar_figura_svg(figura_intervalos, "distribuicao_intervalos.svg")
+
+            # O SVG acima é a prévia estática usada no README. A visualização do
+            # notebook é esta versão interativa do mesmo gráfico.
+            fig_intervalos = go.Figure(go.Bar(
+                x=tabela_distribuicao_intervalos["Intervalo"],
+                y=valores_intervalos,
+                marker_color=["#4C78A8", "#4C78A8", "#4C78A8", "#E45756", "#F2CF5B", "#72B7B2"],
+                text=valores_intervalos,
+                texttemplate="%{text:,}",
+                textposition="outside",
+                hovertemplate="%{x}<br>Ocorrências: %{y:,}<extra></extra>",
+            ))
+            fig_intervalos.update_layout(
+                title="Distribuição dos intervalos entre atualizações consecutivas",
+                template="plotly_white",
+                height=520,
+                xaxis_title="Distância entre horários oficiais",
+                yaxis_title="Ocorrências",
+            )
+            fig_intervalos.show(config=CONFIG_GRAFICO)
 
             tabela_blocos_exibicao = blocos_observados[[
                 "BLOCO_OBSERVADO",
@@ -1015,6 +1140,15 @@ def main() -> None:
                 },
                 margin={"l": 75, "r": 25, "t": 130, "b": 95},
             )
+            figura_composicao, eixo_composicao = plt.subplots(figsize=(12.5, 6.2))
+            posicoes = np.arange(len(maiores_quedas))
+            eixo_composicao.bar(posicoes - 0.2, maiores_quedas["Lula_antes_pct"], 0.4, label="Percentual acumulado anterior", color="#808080")
+            eixo_composicao.bar(posicoes + 0.2, maiores_quedas["Lula_no_incremento_pct"], 0.4, label="Percentual no incremento", color="#D62728")
+            eixo_composicao.set(title="Nas maiores quedas, o incremento tinha percentual menor", xlabel="Horário e tamanho da queda", ylabel="Percentual de Lula nos votos válidos")
+            eixo_composicao.set_xticks(posicoes, maiores_quedas["rótulo"], rotation=35, ha="right")
+            eixo_composicao.set_ylim(0, 62); eixo_composicao.grid(axis="y", alpha=0.25); eixo_composicao.legend(frameon=False)
+            figura_composicao.tight_layout()
+            salvar_figura_svg(figura_composicao, "composicao_maiores_quedas.svg")
             fig_composicao.show(config=CONFIG_GRAFICO)
             display(Markdown(
                 "**Conclusão:** nas maiores quedas, votos continuaram sendo acrescentados, "
@@ -1469,7 +1603,6 @@ def main() -> None:
             eixo_correlacao.legend(loc="best", frameon=False)
             figura_correlacao.tight_layout()
             salvar_figura_svg(figura_correlacao, "correlacao_defasagem.svg")
-
             fig_atraso.show(config=CONFIG_GRAFICO)
             display(pd.DataFrame({
                 "pares_no_atraso_de_61_segundos": [
@@ -1697,8 +1830,14 @@ def main() -> None:
                 showlegend=False,
                 margin={"l": 90, "r": 40, "t": 90, "b": 85},
             )
+            figura_variacao, eixo_variacao = plt.subplots(figsize=(8.6, 7.2))
+            eixo_variacao.scatter(pares_variacao["variação_estimada_pelos_recebidos"], pares_variacao["variação_observada_minuto_seguinte"], s=20, color="#6F42C1", alpha=.65)
+            eixo_variacao.plot(reta_variacao_x, np.polyval(coef_variacao, reta_variacao_x), color="#2F1747", linestyle="--")
+            eixo_variacao.axhline(0, color="#888", linewidth=1); eixo_variacao.axvline(0, color="#888", linewidth=1)
+            eixo_variacao.set(title=f"Variação estimada × observada (r = {correlacao_minuto_variacao:.3f})", xlabel="Variação estimada pelos BUs recebidos (p.p.)", ylabel="Variação observada no minuto seguinte (p.p.)", xlim=(-limite_variacao, limite_variacao), ylim=(-limite_variacao, limite_variacao))
+            eixo_variacao.grid(alpha=.25); figura_variacao.tight_layout()
+            salvar_figura_svg(figura_variacao, "variacao_estimada_observada.svg")
             fig_variacao.show(config=CONFIG_GRAFICO)
-
             resumo_correlacoes = pd.DataFrame({
                 "comparação": [
                     "Quantidade de votos recebidos × totalizados depois",
@@ -1719,7 +1858,6 @@ def main() -> None:
                     "A direção e a intensidade das variações acompanham bem",
                 ],
             })
-            display(resumo_correlacoes)
             display(Markdown(
                 f"**Conclusão:** a correlação de **{correlacao_minuto_variacao:.3f}** mostra "
                 "forte concordância entre o sinal calculado a partir dos BUs recebidos e a "
@@ -1852,9 +1990,57 @@ def main() -> None:
     client.execute()
     for cell in notebook.cells:
         cell.metadata.pop("execution", None)
+
+    # Cada prévia SVG do README deve apontar para uma visualização Plotly no
+    # notebook. Isto também impede que imagens estáticas sejam embutidas nele.
+    expected_plotly_by_svg = {
+        "evolucao_percentual_blocos.svg": "Percentual oficial dos votos válidos",
+        "distribuicao_intervalos.svg": "Distribuição dos intervalos",
+        "correlacao_defasagem.svg": "Maior semelhança",
+        "defasagem_bu_primeira_totalizacao.svg": "Defasagem entre recebimento",
+        "ritmo_apuracao_por_minuto.svg": "Ritmo da apuração presidencial por seção",
+        "composicao_maiores_quedas.svg": "Nas maiores quedas",
+        "variacao_estimada_observada.svg": "A chegada dos BUs",
+    }
+    plotly_titles = []
+    static_image_outputs = []
+    for cell in notebook.cells:
+        for output in cell.get("outputs", []):
+            data = output.get("data", {})
+            figure = data.get("application/vnd.plotly.v1+json")
+            if figure:
+                plotly_titles.append(figure.get("layout", {}).get("title", {}).get("text", ""))
+            static_image_outputs.extend(
+                mime for mime in ("image/png", "image/svg+xml", "image/jpeg") if mime in data
+            )
+    missing_plotly = {
+        svg: title_fragment
+        for svg, title_fragment in expected_plotly_by_svg.items()
+        if not any(title_fragment in title for title in plotly_titles)
+    }
+    if missing_plotly:
+        raise RuntimeError(f"SVG sem gráfico Plotly correspondente: {missing_plotly}")
+    if static_image_outputs:
+        raise RuntimeError(
+            f"O notebook deve conter somente gráficos Plotly, não imagens estáticas: "
+            f"{static_image_outputs}"
+        )
+
     temporary_notebook = NOTEBOOK_PATH.with_name(NOTEBOOK_PATH.name + ".part")
     nbf.write(notebook, temporary_notebook)
     temporary_notebook.replace(NOTEBOOK_PATH)
+    expected_svgs = {
+        "evolucao_percentual_blocos.svg",
+        "distribuicao_intervalos.svg",
+        "correlacao_defasagem.svg",
+        "defasagem_bu_primeira_totalizacao.svg",
+        "ritmo_apuracao_por_minuto.svg",
+        "composicao_maiores_quedas.svg",
+        "variacao_estimada_observada.svg",
+    }
+    actual_svgs = {path.name for path in (ROOT / "04_bi" / "graficos").glob("*.svg")}
+    if actual_svgs != expected_svgs:
+        raise RuntimeError(f"SVGs órfãos ou ausentes: {sorted(actual_svgs ^ expected_svgs)}")
     print(f"Notebook gerado e executado: {NOTEBOOK_PATH}")
 
 

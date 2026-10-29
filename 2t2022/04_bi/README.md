@@ -18,6 +18,15 @@ totalizado cerca de um minuto depois. As quedas percentuais acontecem quando a p
 no incremento novo é menor que seu percentual acumulado anterior — não porque votos acumulados
 tenham sido retirados.
 
+Uma reconciliação posterior com o detalhe oficial por seção confirmou exatamente as 5.286
+atualizações nacionais: em cada segundo, o histórico coincide com a soma das seções cuja
+primeira totalização parcial já havia ocorrido. Veja
+`auditoria/RELATORIO_DETALHE_SECAO.md`.
+
+O ZIP de detalhe por seção agora integra a preparação padrão: URL e SHA-256 fixado são
+validados por `prepare_sources.py`, e `validar_detalhe_secao.py` produz a reconciliação e o
+gráfico de defasagem antes de recriar o notebook.
+
 A explicação completa, incluindo limites da análise, está em
 `auditoria/SINTESE_CORRELACAO_BU_TOTALIZACAO.md`.
 
@@ -106,6 +115,22 @@ e não capturas de tela. Clique em qualquer gráfico para abrir a análise inter
 ### Correlação por defasagem
 
 [![Correlação entre recebimento e totalização por defasagem](graficos/correlacao_defasagem.svg)](notebooks/analise_evolucao_votos.ipynb)
+
+### Defasagem por seção confirmada na fonte
+
+[![Defasagem entre recebimento do BU e primeira totalização](graficos/defasagem_bu_primeira_totalizacao.svg)](notebooks/analise_evolucao_votos.ipynb)
+
+### Ritmo por minuto nos dois turnos
+
+[![Ritmo da apuração presidencial por seção](graficos/ritmo_apuracao_por_minuto.svg)](notebooks/analise_evolucao_votos.ipynb)
+
+O detalhe oficial por seção contém os dois turnos. Cada painel agrupa os votos válidos
+finais e as seções pelo minuto de sua primeira totalização parcial. Só o segundo turno
+dispõe, neste projeto, do histórico nacional para a reconciliação segundo a segundo.
+
+### Composição das maiores quedas e variação prevista
+
+[Composição dos incrementos](graficos/composicao_maiores_quedas.svg) · [Variação estimada × observada](graficos/variacao_estimada_observada.svg)
 
 Todos os gráficos aceitam zoom retangular, seleção pela legenda e detalhes ao passar o
 mouse dentro do notebook. Para recriar o notebook e os SVGs:

@@ -278,5 +278,14 @@
         "sha256": "453cf754ad71b7bd9bcd31303fd14aefdecb7d091388ba585706ebd3c03d763f"
       }
     ]
+  },
+  "detalhe_apuracao_secao": {
+    "zip": "detalhe_votacao_secao_2022.zip",
+    "zip_url": "https://cdn.tse.jus.br/estatistica/sead/odsele/detalhe_votacao_secao/detalhe_votacao_secao_2022.zip",
+    "zip_sha256": "ad22c50b9e6d9dfb096a2170680a190f1734895ba89d8977b95fd63ca02c03da",
+    "arquivo": "detalhe_votacao_secao_2022_BR.csv",
+    "arquivo_sha256": "611843dc968ac4a5c0b72f97b8799f88c678fd9f654829ad0c524477f7c24b5e",
+    "tamanho_bytes": 330747068,
+    "status_zip": "já baixado e validado"
   }
 }

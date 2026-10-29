@@ -12,6 +12,7 @@ fi
 .venv/bin/python 04_bi/scripts/prepare_sources.py --ano 2022 --turno 2
 .venv/bin/python 04_bi/scripts/build_bi.py
 .venv/bin/python 04_bi/scripts/validate_bi.py
+.venv/bin/python 04_bi/scripts/validar_detalhe_secao.py
 .venv/bin/python 04_bi/scripts/create_analysis_notebook.py
 .venv/bin/python 04_bi/scripts/finalize_audit.py --gerar
 .venv/bin/python 04_bi/scripts/finalize_audit.py --verificar
